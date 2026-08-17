@@ -62,6 +62,55 @@ Every milestone should leave the repository in a runnable state. The project wil
 - Measured pause distributions (`p50`, `p95`, `p99`, `p99.9`, and maximum), not only average pause time.
 - Safety comments on every `unsafe` block and written invariants for every raw-pointer-owning type.
 
+## Rust toolchains
+
+Normal builds use Rust 1.97.1, pinned in `rust-toolchain.toml`. The workspace's `rust-version` is also 1.97.1, meaning that this is the minimum compiler version the packages claim to support. Install it with:
+
+```powershell
+rustup toolchain install 1.97.1 --profile minimal --component clippy,rustfmt
+```
+
+Commands run from this repository select the pinned toolchain automatically:
+
+```powershell
+cargo build --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+Miri is a Rust interpreter that detects many forms of undefined behavior while tests execute, including invalid pointer use, out-of-bounds access, alignment errors, aliasing violations, and some data races. It cannot prove that code is sound: it checks only executed paths, and many operating-system and foreign-function calls are unsupported.
+
+Miri is a nightly-only component, so it is intentionally not listed in the stable `rust-toolchain.toml`. The commands below pin the available 2026-08-17 nightly (Rust 1.100.0-nightly) so local runs and CI use the same interpreter build:
+
+```powershell
+rustup toolchain install nightly-2026-08-17 --profile minimal --component miri
+cargo +nightly-2026-08-17 miri setup
+```
+
+Run Miri only on the runtime-independent crate:
+
+```powershell
+cargo +nightly-2026-08-17 miri test -p gc-core
+```
+
+### Miri demonstration
+
+`gc-core` contains an ignored teaching test with a deliberate use-after-free. An ordinary test run compiles it but does not execute it:
+
+```powershell
+cargo test -p gc-core
+```
+
+Run just that test through Miri to see the interpreter reject behavior that the compiler accepts:
+
+```powershell
+cargo +nightly-2026-08-17 miri test -p gc-core --test miri_undefined_behavior -- --ignored --exact miri_detects_use_after_free
+```
+
+This command is expected to fail with `memory access failed: ... has been freed, so this pointer is dangling` because the test reads through a pointer after freeing its allocation. The test first checks `cfg!(miri)`, so accidentally forcing ignored tests through the native runner produces a normal panic before reaching the undefined operation.
+
+Do not expect `gc-platform`, `gc-runtime`, `gc-ffi`, or the C++ shim to run under Miri once they use Windows APIs, CoreCLR callbacks, or native FFI. Test those layers with their normal integration and native-safety tooling instead.
+
 ## Public-repository rules
 
 - Never commit runtime binaries, SDK files, dumps, traces, benchmark machine identifiers, absolute local paths, credentials, or environment files.
