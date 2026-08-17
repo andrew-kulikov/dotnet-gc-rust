@@ -144,7 +144,7 @@ Reduce the amount of heap-dependent work in any one stop. This is pause shaping,
 
 ### Safe-point API
 
-The managed harness may call an experimental API between frames:
+The frame-loop sample may call an experimental API between frames:
 
 ```text
 CollectAtSafePoint(target_budget_microseconds)

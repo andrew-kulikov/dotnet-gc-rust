@@ -19,6 +19,8 @@ Use one small pull request per observable capability. Each pull request should i
 
 Keep a weekly engineering log in `docs/weekly/` with four headings: learned, built, measured, next. This turns the repository into a useful public learning record without exposing private notes.
 
+The milestone plan is decomposed into small, sequential exercises under `tasks/`. Complete each exercise on its own branch and use `tasks/REVIEW_GUIDE.md` when asking an agent to verify it.
+
 ## Milestone 0 — Public skeleton and ABI risk spike
 
 **Dates:** August 17-23  
@@ -29,7 +31,7 @@ Tasks:
 1. Install a current stable Rust toolchain with `rustup`; record the pinned version in `rust-toolchain.toml`.
 2. Pin one installed .NET 10 SDK/runtime version with `global.json` and document how to obtain it.
 3. Confirm the required MSVC C++ Build Tools and Windows SDK are available.
-4. Create the Cargo workspace and the empty managed harness.
+4. Create the Cargo workspace and the first managed sample.
 5. Export `GC_VersionInfo` and `GC_Initialize`; initially return failure deliberately and verify that CoreCLR reaches both exports.
 6. Write ADR-0001 comparing:
    - a thin C++ ABI shim plus a stable C ABI into Rust (recommended), and
@@ -39,7 +41,7 @@ Tasks:
 
 Exit criteria:
 
-- CI builds the native library and managed harness from a clean checkout.
+- CI builds the native library and managed samples from a clean checkout.
 - A test proves CoreCLR calls the exported version and initialization functions.
 - No runtime binaries or machine-specific paths are tracked.
 

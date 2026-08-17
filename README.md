@@ -20,11 +20,11 @@ The first complete release will target:
 - Reusable free space through coalescing and segregated free lists.
 - Strong, pinned, weak, and dependent handles.
 - Interior pointers, frozen segments, and finalization.
-- A managed behavioral test application plus a runtime-independent Rust test harness.
+- Managed behavioral samples plus a runtime-independent Rust test harness.
 
 The experimental second release will add a regional, frame-aware collection policy. It will cap the amount of heap work selected for one collection and allow a managed game loop to request collection at a safe point between frames. The intended trade-off is higher memory use and bookkeeping cost in exchange for a tighter pause distribution.
 
-See [ROADMAP.md](ROADMAP.md) for the implementation schedule, [docs/DESIGN.md](docs/DESIGN.md) for the proposed architecture, and [docs/RESOURCES.md](docs/RESOURCES.md) for the reading list.
+See [ROADMAP.md](ROADMAP.md) for the implementation schedule, [tasks/README.md](tasks/README.md) for the hands-on learning path, [docs/DESIGN.md](docs/DESIGN.md) for the proposed architecture, and [docs/RESOURCES.md](docs/RESOURCES.md) for the reading list.
 
 ## Non-goals for 2026
 
@@ -43,9 +43,10 @@ crates/
   gc-runtime/       CoreCLR object layout, GCDesc decoding, roots, and handles
   gc-ffi/           Stable C ABI exposed by the Rust library
 native-shim/        Thin C++ implementation of the versioned CoreCLR GC interfaces
-managed-harness/    C# behavioral tests and frame-shaped workloads
+samples/            Small C# programs for smoke tests, GC features, and workloads
 benchmarks/         Reproducible workloads, runners, and result schemas
 docs/               Design notes, ADRs, safety invariants, and research notes
+tasks/              CodeCrafters-style learning iterations and review checklists
 ```
 
 The C++ shim should contain no collection policy. It exists only because CoreCLR's GC/EE interfaces are C++ virtual interfaces whose ABI is not a stable Rust FFI boundary. All allocator and collector behavior should remain in Rust behind a small C ABI.
