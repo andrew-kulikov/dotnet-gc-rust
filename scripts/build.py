@@ -1,0 +1,335 @@
+#!/usr/bin/env python3
+"""Bootstrap and build the Windows x64 CoreCLR GC shim."""
+
+from __future__ import annotations
+
+import argparse
+import os
+from pathlib import Path
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+SUBMODULE_PATH = Path("external/dotnet-runtime")
+SPARSE_PATHS = ("src/coreclr/gc", "src/coreclr/inc", "src/native")
+LOADER_DIAGNOSTIC = "dotnet-gc-rust: native shim reached Rust"
+
+
+def display_command(command: list[str]) -> str:
+    if os.name == "nt":
+        return subprocess.list2cmdline(command)
+    return shlex.join(command)
+
+
+def run(
+    command: list[str],
+    *,
+    cwd: Path = REPOSITORY_ROOT,
+    env: dict[str, str] | None = None,
+    capture_output: bool = False,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    print(f"+ {display_command(command)}", flush=True)
+    return subprocess.run(
+        command,
+        cwd=cwd,
+        env=env,
+        capture_output=capture_output,
+        check=check,
+        text=True,
+    )
+
+
+def recorded_submodule_commit() -> str:
+    result = run(
+        ["git", "ls-files", "--stage", "--", SUBMODULE_PATH.as_posix()],
+        capture_output=True,
+    )
+    fields = result.stdout.split()
+    if len(fields) < 2 or fields[0] != "160000":
+        raise RuntimeError(f"{SUBMODULE_PATH} is not recorded as a Git submodule")
+    return fields[1]
+
+
+def bootstrap() -> None:
+    expected_commit = recorded_submodule_commit()
+    submodule = REPOSITORY_ROOT / SUBMODULE_PATH
+    interface_header = submodule / "src/coreclr/gc/gcinterface.h"
+
+    if (submodule / ".git").exists():
+        current_commit = run(
+            ["git", "rev-parse", "HEAD"], cwd=submodule, capture_output=True
+        ).stdout.strip()
+        sparse_paths = run(
+            ["git", "sparse-checkout", "list"],
+            cwd=submodule,
+            capture_output=True,
+            check=False,
+        )
+        if (
+            current_commit == expected_commit
+            and sparse_paths.returncode == 0
+            and set(sparse_paths.stdout.splitlines()) == set(SPARSE_PATHS)
+            and interface_header.is_file()
+        ):
+            print(f"dotnet/runtime is already bootstrapped at {expected_commit[:12]}")
+            return
+
+        status = run(
+            ["git", "status", "--porcelain"], cwd=submodule, capture_output=True
+        )
+        if status.stdout.strip():
+            raise RuntimeError(
+                "dotnet/runtime has local changes; refusing to change its checkout"
+            )
+
+    if not (submodule / ".git").exists():
+        # A first checkout may report Windows long-path errors before
+        # sparse-checkout is configured. Continue if Git created the submodule
+        # repository, then apply the sparse checkout and restore the recorded
+        # commit below.
+        update = run(
+            [
+                "git",
+                "-c",
+                "core.longpaths=true",
+                "submodule",
+                "update",
+                "--init",
+                "--depth",
+                "1",
+                "--filter=blob:none",
+                "--",
+                SUBMODULE_PATH.as_posix(),
+            ],
+            check=False,
+        )
+        if update.returncode != 0 and not (submodule / ".git").exists():
+            raise RuntimeError("Git could not initialize the dotnet/runtime submodule")
+
+    run(["git", "config", "core.longpaths", "true"], cwd=submodule)
+    run(["git", "sparse-checkout", "init", "--cone"], cwd=submodule)
+    run(["git", "sparse-checkout", "set", *SPARSE_PATHS], cwd=submodule)
+
+    commit_exists = run(
+        ["git", "cat-file", "-e", f"{expected_commit}^{{commit}}"],
+        cwd=submodule,
+        check=False,
+    )
+    if commit_exists.returncode != 0:
+        run(
+            ["git", "fetch", "--depth", "1", "origin", expected_commit],
+            cwd=submodule,
+        )
+
+    run(["git", "checkout", "--detach", expected_commit], cwd=submodule)
+
+    if not interface_header.is_file():
+        raise RuntimeError(f"expected CoreCLR header is missing: {interface_header}")
+
+    print(f"Bootstrapped dotnet/runtime at {expected_commit[:12]}")
+
+
+def locate_visual_studio() -> Path:
+    candidates: list[Path] = []
+    vswhere = shutil.which("vswhere.exe")
+    if vswhere is None:
+        installer = Path(os.environ.get("ProgramFiles(x86)", ""))
+        if installer:
+            candidate = installer / "Microsoft Visual Studio/Installer/vswhere.exe"
+            if candidate.is_file():
+                vswhere = str(candidate)
+
+    if vswhere is not None:
+        result = run(
+            [
+                vswhere,
+                "-latest",
+                "-products",
+                "*",
+                "-requires",
+                "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+                "-property",
+                "installationPath",
+            ],
+            capture_output=True,
+        )
+        installation = result.stdout.strip()
+        if installation:
+            candidates.append(Path(installation))
+
+    for variable in ("ProgramFiles", "ProgramFiles(x86)"):
+        root_text = os.environ.get(variable)
+        if not root_text:
+            continue
+        visual_studio_root = Path(root_text) / "Microsoft Visual Studio"
+        candidates.extend(sorted(visual_studio_root.glob("*/*"), reverse=True))
+
+    for candidate in candidates:
+        if (candidate / "VC/Tools/MSVC").is_dir():
+            return candidate.resolve()
+    raise RuntimeError("Visual Studio with the MSVC x64 tools was not found")
+
+
+def locate_cmake(visual_studio: Path) -> Path:
+    from_path = shutil.which("cmake.exe")
+    if from_path is not None:
+        return Path(from_path)
+    bundled = (
+        visual_studio
+        / "Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+    )
+    if bundled.is_file():
+        return bundled
+    raise RuntimeError("cmake.exe was not found in PATH or Visual Studio")
+
+
+def locate_dumpbin(visual_studio: Path) -> Path:
+    candidates = sorted(
+        (visual_studio / "VC/Tools/MSVC").glob("*/bin/Hostx64/x64/dumpbin.exe"),
+        reverse=True,
+    )
+    if not candidates:
+        raise RuntimeError("dumpbin.exe was not found in Visual Studio")
+    return candidates[0]
+
+
+def select_visual_studio_generator(cmake: Path) -> str:
+    result = run([str(cmake), "--help"], capture_output=True)
+    generators = re.findall(r"Visual Studio \d+ \d+", result.stdout)
+    if not generators:
+        raise RuntimeError("CMake does not advertise a Visual Studio generator")
+    return generators[0]
+
+
+def build(configuration: str) -> Path:
+    bootstrap()
+    if os.name != "nt":
+        raise RuntimeError("the native shim currently supports Windows only")
+
+    visual_studio = locate_visual_studio()
+    cmake = locate_cmake(visual_studio)
+    dumpbin = locate_dumpbin(visual_studio)
+    generator = select_visual_studio_generator(cmake)
+    environment = os.environ.copy()
+    cargo_target = REPOSITORY_ROOT / "target"
+    environment["CARGO_TARGET_DIR"] = str(cargo_target)
+
+    cargo_command = ["cargo", "build", "--locked", "-p", "gc-ffi"]
+    if configuration == "release":
+        cargo_command.append("--release")
+    run(cargo_command, env=environment)
+
+    rust_profile = "release" if configuration == "release" else "debug"
+    rust_output = cargo_target / rust_profile
+    cmake_configuration = "Release" if configuration == "release" else "Debug"
+    build_directory = REPOSITORY_ROOT / "out/build/native-shim" / configuration
+
+    run(
+        [
+            str(cmake),
+            "-S",
+            str(REPOSITORY_ROOT / "native-shim"),
+            "-B",
+            str(build_directory),
+            "-G",
+            generator,
+            "-A",
+            "x64",
+            f"-DRUST_OUTPUT_DIR={rust_output}",
+        ],
+        env=environment,
+    )
+    run(
+        [str(cmake), "--build", str(build_directory), "--config", cmake_configuration],
+        env=environment,
+    )
+
+    shim = build_directory / "stage/dotnet_gc_shim.dll"
+    if not shim.is_file():
+        raise RuntimeError(f"native shim was not produced: {shim}")
+    verify_exports(shim, dumpbin, environment)
+    print(f"Built {shim}")
+    return shim
+
+
+def verify_exports(
+    shim: Path, dumpbin: Path, environment: dict[str, str]
+) -> None:
+    result = run(
+        [str(dumpbin), "/exports", str(shim)],
+        env=environment,
+        capture_output=True,
+    )
+    missing = [
+        export
+        for export in ("GC_Initialize", "GC_VersionInfo")
+        if export not in result.stdout
+    ]
+    if missing:
+        raise RuntimeError(f"native shim is missing exports: {', '.join(missing)}")
+    print("Verified exports: GC_Initialize, GC_VersionInfo")
+
+
+def smoke(configuration: str) -> None:
+    shim = build(configuration)
+    environment = os.environ.copy()
+    for key in list(environment):
+        if key.casefold() in {"dotnet_gcpath", "dotnet_gcname"}:
+            del environment[key]
+
+    project = REPOSITORY_ROOT / "samples/LoaderSmoke/LoaderSmoke.csproj"
+    run(["dotnet", "build", str(project)], env=environment)
+
+    sample = REPOSITORY_ROOT / "samples/LoaderSmoke/bin/Debug/net10.0/LoaderSmoke.exe"
+    environment["DOTNET_GCPath"] = str(shim)
+    environment["PATH"] = f"{shim.parent}{os.pathsep}{environment.get('PATH', '')}"
+    result = run(
+        [str(sample)],
+        env=environment,
+        capture_output=True,
+        check=False,
+    )
+    output = result.stdout + result.stderr
+    if result.returncode == 0 or LOADER_DIAGNOSTIC not in output:
+        print(output, file=sys.stderr)
+        raise RuntimeError("the loader did not reach the expected failing shim boundary")
+    print("Loader smoke test reached the expected deliberate initialization failure")
+
+
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers.add_parser("bootstrap", help="initialize the pinned runtime submodule")
+
+    for command in ("build", "smoke"):
+        command_parser = subparsers.add_parser(command)
+        command_parser.add_argument(
+            "--configuration",
+            choices=("debug", "release"),
+            default="debug",
+        )
+    return parser.parse_args()
+
+
+def main() -> int:
+    arguments = parse_arguments()
+    try:
+        if arguments.command == "bootstrap":
+            bootstrap()
+        elif arguments.command == "build":
+            build(arguments.configuration)
+        else:
+            smoke(arguments.configuration)
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

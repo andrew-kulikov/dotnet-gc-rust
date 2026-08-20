@@ -51,6 +51,28 @@ tasks/              CodeCrafters-style learning iterations and review checklists
 
 The C++ shim should contain no collection policy. It exists only because CoreCLR's GC/EE interfaces are C++ virtual interfaces whose ABI is not a stable Rust FFI boundary. All allocator and collector behavior should remain in Rust behind a small C ABI.
 
+## Native-shim toolchain (Windows x64)
+
+The native shim builds against the CoreCLR headers from the shallow `external/dotnet-runtime` submodule, pinned to the .NET 10.0.11 tag at commit `79d0c463f1b55624c874a11585f7e47731e8d675`. A sparse checkout keeps only the CoreCLR GC, CoreCLR include, and native support trees. Initialize it after cloning:
+
+```console
+python scripts/build.py bootstrap
+```
+
+Build the Rust FFI library and C++ shim together:
+
+```console
+python scripts/build.py build
+```
+
+The Python entry point locates Visual Studio, invokes Cargo and CMake with the x64 Visual Studio generator, and verifies the standalone-GC exports. Build products are staged under `out/build/native-shim/debug/stage`. Run the loader-boundary smoke test, which currently expects the shim to fail initialization deliberately, with:
+
+```console
+python scripts/build.py smoke
+```
+
+The script uses only the Python standard library. The current shim itself remains Windows x64 only.
+
 ## Quality bar
 
 Every milestone should leave the repository in a runnable state. The project will use:

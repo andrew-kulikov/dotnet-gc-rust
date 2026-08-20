@@ -1,0 +1,4 @@
+[submodule "dotnet-runtime"]
+	path = external/dotnet-runtime
+	url = https://github.com/dotnet/runtime.git
+	shallow = true

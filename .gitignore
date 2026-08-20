@@ -1,4 +1,5 @@
 /target/
+/out/
 **/bin/
 **/obj/
 artifacts/
@@ -19,4 +20,3 @@ artifacts/
 secrets.*
 *.user
 *.suo
-
