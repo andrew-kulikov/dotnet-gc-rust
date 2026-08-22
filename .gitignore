@@ -20,3 +20,4 @@ artifacts/
 secrets.*
 *.user
 *.suo
+build/

@@ -294,9 +294,15 @@ def smoke(configuration: str) -> None:
         capture_output=True,
         check=False,
     )
+    if result.stdout:
+        sys.stdout.write(result.stdout)
+        sys.stdout.flush()
+    if result.stderr:
+        sys.stderr.write(result.stderr)
+        sys.stderr.flush()
+
     output = result.stdout + result.stderr
     if result.returncode == 0 or LOADER_DIAGNOSTIC not in output:
-        print(output, file=sys.stderr)
         raise RuntimeError("the loader did not reach the expected failing shim boundary")
     print("Loader smoke test reached the expected deliberate initialization failure")
 
