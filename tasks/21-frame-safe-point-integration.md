@@ -6,12 +6,12 @@ Run regional collections at an explicit point between frames and measure where t
 
 ## Assignment
 
-- Add an experimental managed control API that requests a collection with a microsecond work budget.
-- Extend `samples/FrameWorkload` with deterministic 60 Hz and 120 Hz loops and seeded allocation patterns.
-- Integrate regional selection, remembered-set scanning, victim tracing, and sweeping.
-- Measure suspension/root scanning separately from regional work.
-- Add emergency full-collection watermarks and observable fallback reasons.
-- Ensure ordinary allocation pressure can still request a safe full collection.
+- [ ] Add an experimental managed control API that requests a collection with a microsecond work budget.
+- [ ] Extend `samples/FrameWorkload` with deterministic 60 Hz and 120 Hz loops and seeded allocation patterns.
+- [ ] Integrate regional selection, remembered-set scanning, victim tracing, and sweeping.
+- [ ] Measure suspension/root scanning separately from regional work.
+- [ ] Add emergency full-collection watermarks and observable fallback reasons.
+- [ ] Ensure ordinary allocation pressure can still request a safe full collection.
 
 ## Constraints
 

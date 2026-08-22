@@ -6,11 +6,11 @@ Find all model objects reachable from a root set without recursion.
 
 ## Assignment
 
-- Define root enumeration and reference tracing boundaries used by the model.
-- Store mark state in side metadata.
-- Implement iterative graph traversal with an explicit work stack.
-- Produce collection statistics for roots visited, objects marked, and maximum work-stack size.
-- Compare the result with a simple reference reachability implementation in tests.
+- [ ] Define root enumeration and reference tracing boundaries used by the model.
+- [ ] Store mark state in side metadata.
+- [ ] Implement iterative graph traversal with an explicit work stack.
+- [ ] Produce collection statistics for roots visited, objects marked, and maximum work-stack size.
+- [ ] Compare the result with a simple reference reachability implementation in tests.
 
 ## Constraints
 

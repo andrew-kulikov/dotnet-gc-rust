@@ -6,11 +6,11 @@ Return real interface objects to CoreCLR while every unsupported operation fails
 
 ## Assignment
 
-- Implement the required pinned `IGCHeap`, `IGCHandleManager`, and `IGCHandleStore` surface in the C++ shim.
-- Keep interface objects thin and delegate state and policy to Rust through the existing C ABI.
-- Wrap the supplied `IGCToCLR` callbacks without leaking C++ layout into Rust.
-- Add capability/configuration checks for Windows x64 workstation mode.
-- Inventory required, temporarily stubbed, and unsupported methods.
+- [ ] Implement the required pinned `IGCHeap`, `IGCHandleManager`, and `IGCHandleStore` surface in the C++ shim.
+- [ ] Keep interface objects thin and delegate state and policy to Rust through the existing C ABI.
+- [ ] Wrap the supplied `IGCToCLR` callbacks without leaking C++ layout into Rust.
+- [ ] Add capability/configuration checks for Windows x64 workstation mode.
+- [ ] Inventory required, temporarily stubbed, and unsupported methods.
 
 ## Constraints
 

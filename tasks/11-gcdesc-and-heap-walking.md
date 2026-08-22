@@ -6,11 +6,11 @@ Walk the real heap and enumerate every managed reference slot described by CoreC
 
 ## Assignment
 
-- Implement forward walking across every committed collector segment.
-- Decode both positive and negative `GCDesc` forms used by the pinned runtime.
-- Expose a callback-based reference-slot enumerator that does not allocate in the hot path.
-- Expand `samples/ObjectLayouts` with reference arrays, inheritance, nested structs, and arrays of structs containing references.
-- Add a diagnostic comparison against runtime tooling or a deliberately independent fixture oracle.
+- [ ] Implement forward walking across every committed collector segment.
+- [ ] Decode both positive and negative `GCDesc` forms used by the pinned runtime.
+- [ ] Expose a callback-based reference-slot enumerator that does not allocate in the hot path.
+- [ ] Expand `samples/ObjectLayouts` with reference arrays, inheritance, nested structs, and arrays of structs containing references.
+- [ ] Add a diagnostic comparison against runtime tooling or a deliberately independent fixture oracle.
 
 ## Constraints
 

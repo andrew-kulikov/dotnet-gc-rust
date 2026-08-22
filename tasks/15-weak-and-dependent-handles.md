@@ -6,11 +6,11 @@ Implement runtime weak-reference clearing and dependent-handle fixed-point seman
 
 ## Assignment
 
-- Add short and long weak-handle processing in their correct collection phases.
-- Add dependent-handle scanning until no new secondary target becomes reachable.
-- Extend `samples/GcFeatures` with weak references and `ConditionalWeakTable` cases.
-- Test chains, cycles, resurrection interactions that are already supported, and handle mutation between collections.
-- Record fixed-point pass counts and weak handles cleared for diagnostics.
+- [ ] Add short and long weak-handle processing in their correct collection phases.
+- [ ] Add dependent-handle scanning until no new secondary target becomes reachable.
+- [ ] Extend `samples/GcFeatures` with weak references and `ConditionalWeakTable` cases.
+- [ ] Test chains, cycles, resurrection interactions that are already supported, and handle mutation between collections.
+- [ ] Record fixed-point pass counts and weak handles cleared for diagnostics.
 
 ## Constraints
 

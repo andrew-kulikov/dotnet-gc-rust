@@ -6,12 +6,12 @@ Prove that the pinned CoreCLR reaches the custom collector boundary. Failure aft
 
 ## Assignment
 
-- Record the exact runtime source commit whose GC headers are used.
-- Build the thin C++ interface shim and Rust `cdylib` with a narrow C ABI between them.
-- Implement the standalone-GC version and initialization entry points.
-- Make initialization emit a deterministic diagnostic and return a deliberate failure.
-- Add a command that launches `samples/LoaderSmoke` with the custom GC selected.
-- Write ADR-0001 describing why the project uses a C++ ABI shim and what remains owned by Rust.
+- [x] Record the exact runtime source commit whose GC headers are used.
+- [x] Build the thin C++ interface shim and Rust `cdylib` with a narrow C ABI between them.
+- [x] Implement the standalone-GC version and initialization entry points.
+- [x] Make initialization emit a deterministic diagnostic and return a deliberate failure.
+- [x] Add a command that launches `samples/LoaderSmoke` with the custom GC selected.
+- [ ] Write ADR-0001 describing why the project uses a C++ ABI shim and what remains owned by Rust.
 
 ## Constraints
 

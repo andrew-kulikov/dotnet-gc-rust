@@ -6,12 +6,12 @@ Stop managed execution, enumerate real roots, and always restart execution safel
 
 ## Assignment
 
-- Wrap execution-engine suspension in an RAII state guard.
-- Fix or retire active allocation contexts before heap traversal.
-- Adapt `GcScanRoots` callbacks into the Rust tracing boundary.
-- Record root kind and flags needed by later pinning/interior-pointer work.
-- Add a multithreaded sample that keeps a known object graph alive through stack and static roots.
-- Inject failures after suspension to exercise restart paths.
+- [ ] Wrap execution-engine suspension in an RAII state guard.
+- [ ] Fix or retire active allocation contexts before heap traversal.
+- [ ] Adapt `GcScanRoots` callbacks into the Rust tracing boundary.
+- [ ] Record root kind and flags needed by later pinning/interior-pointer work.
+- [ ] Add a multithreaded sample that keeps a known object graph alive through stack and static roots.
+- [ ] Inject failures after suspension to exercise restart paths.
 
 ## Constraints
 

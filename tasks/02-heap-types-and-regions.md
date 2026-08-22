@@ -6,11 +6,11 @@ Model a heap as typed offsets and fixed-size regions without using OS memory or 
 
 ## Assignment
 
-- Introduce distinct types for object IDs, region IDs, byte sizes, alignments, and offsets.
-- Implement checked alignment and address-range calculations.
-- Model a contiguous arena divided into equal regions.
-- Track each region's bounds and state without storing references into a growable byte buffer.
-- Define the minimum invariants in crate documentation.
+- [ ] Introduce distinct types for object IDs, region IDs, byte sizes, alignments, and offsets.
+- [ ] Implement checked alignment and address-range calculations.
+- [ ] Model a contiguous arena divided into equal regions.
+- [ ] Track each region's bounds and state without storing references into a growable byte buffer.
+- [ ] Define the minimum invariants in crate documentation.
 
 ## Constraints
 

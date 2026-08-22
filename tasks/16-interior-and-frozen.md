@@ -6,11 +6,11 @@ Resolve interior roots efficiently and treat frozen segments as external, perman
 
 ## Assignment
 
-- Build a region-local brick or index table that maps an interior address to its containing object.
-- Update the index whenever object boundaries change.
-- Implement frozen-segment registration, unregistration if required by the pinned contract, and managed-range checks.
-- Ensure frozen objects are traversed when necessary but are never marked in place or swept.
-- Add samples using spans, pinned interiors, string literals, and references from frozen objects.
+- [ ] Build a region-local brick or index table that maps an interior address to its containing object.
+- [ ] Update the index whenever object boundaries change.
+- [ ] Implement frozen-segment registration, unregistration if required by the pinned contract, and managed-range checks.
+- [ ] Ensure frozen objects are traversed when necessary but are never marked in place or swept.
+- [ ] Add samples using spans, pinned interiors, string literals, and references from frozen objects.
 
 ## Constraints
 

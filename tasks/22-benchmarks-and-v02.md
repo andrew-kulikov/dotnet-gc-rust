@@ -6,12 +6,12 @@ Decide honestly whether the frame-aware policy improves tail pauses enough to ju
 
 ## Assignment
 
-- Implement the workloads and comparisons listed in roadmap milestone 9.
-- Record pause percentiles, maxima, frame misses, throughput, total GC CPU, committed memory, reclamation rate, and fragmentation.
-- Automate warmup, seeded trials, raw result capture, and report generation.
-- Record hardware class, OS, power plan, runtime commit, trial count, and uncertainty without private machine identifiers.
-- Explain wins, losses, outliers, and fallback frequency.
-- Reproduce the report from a clean checkout and tag `v0.2.0` even if the hypothesis fails.
+- [ ] Implement the workloads and comparisons listed in roadmap milestone 9.
+- [ ] Record pause percentiles, maxima, frame misses, throughput, total GC CPU, committed memory, reclamation rate, and fragmentation.
+- [ ] Automate warmup, seeded trials, raw result capture, and report generation.
+- [ ] Record hardware class, OS, power plan, runtime commit, trial count, and uncertainty without private machine identifiers.
+- [ ] Explain wins, losses, outliers, and fallback frequency.
+- [ ] Reproduce the report from a clean checkout and tag `v0.2.0` even if the hypothesis fails.
 
 ## Constraints
 

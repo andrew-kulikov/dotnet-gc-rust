@@ -6,11 +6,11 @@ Reserve a stable address range and control commitment through a small RAII abstr
 
 ## Assignment
 
-- Add a Windows implementation for reserve, commit, decommit, and release.
-- Keep the API injectable so most collector-core tests remain platform independent.
-- Track reserved and committed ranges with checked page alignment.
-- Add a guard-page test mode for detecting overruns.
-- Document ownership, thread-safety, and lifetime invariants for the raw address range.
+- [ ] Add a Windows implementation for reserve, commit, decommit, and release.
+- [ ] Keep the API injectable so most collector-core tests remain platform independent.
+- [ ] Track reserved and committed ranges with checked page alignment.
+- [ ] Add a guard-page test mode for detecting overruns.
+- [ ] Document ownership, thread-safety, and lifetime invariants for the raw address range.
 
 ## Constraints
 

@@ -6,12 +6,12 @@ Perform a complete stop-the-world collection of real managed objects without reu
 
 ## Assignment
 
-- Feed runtime roots and `GCDesc` reference slots into the iterative marker.
-- Store real-heap mark state in side metadata.
-- Sweep dead objects into valid walkable free objects.
-- Clear reclaimed memory in debug builds and verify the entire heap after collection.
-- Add forced-collection workloads for cycles, deep graphs, multiple threads, exceptions, and rapidly dying objects.
-- Report phase timings and byte counters.
+- [ ] Feed runtime roots and `GCDesc` reference slots into the iterative marker.
+- [ ] Store real-heap mark state in side metadata.
+- [ ] Sweep dead objects into valid walkable free objects.
+- [ ] Clear reclaimed memory in debug builds and verify the entire heap after collection.
+- [ ] Add forced-collection workloads for cycles, deep graphs, multiple threads, exceptions, and rapidly dying objects.
+- [ ] Report phase timings and byte counters.
 
 ## Constraints
 

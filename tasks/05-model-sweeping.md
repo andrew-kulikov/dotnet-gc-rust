@@ -6,11 +6,11 @@ Reclaim unmarked model objects and reuse their storage while keeping every regio
 
 ## Assignment
 
-- Convert dead objects into valid free objects during a forward sweep.
-- Coalesce adjacent free objects.
-- Maintain segregated free lists and allocate from them before the bump frontier.
-- Split a free object only when the remainder can be represented safely.
-- Track live, reclaimed, reusable, and fragmented bytes.
+- [ ] Convert dead objects into valid free objects during a forward sweep.
+- [ ] Coalesce adjacent free objects.
+- [ ] Maintain segregated free lists and allocate from them before the bump frontier.
+- [ ] Split a free object only when the remainder can be represented safely.
+- [ ] Track live, reclaimed, reusable, and fragmented bytes.
 
 ## Constraints
 

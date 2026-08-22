@@ -6,11 +6,11 @@ Calculate the size and boundaries of real managed objects for the pinned x64 run
 
 ## Assignment
 
-- Document the relevant object header, method-table pointer, alignment, string, array, and free-object layouts.
-- Implement checked size calculation for ordinary objects, strings, boxed values, and arrays.
-- Add `samples/ObjectLayouts` with inheritance, nested value types, multiple array forms, and boundary lengths.
-- Fill abandoned allocation-context tails with valid free objects.
-- Keep runtime-layout knowledge isolated from the generic collector model.
+- [ ] Document the relevant object header, method-table pointer, alignment, string, array, and free-object layouts.
+- [ ] Implement checked size calculation for ordinary objects, strings, boxed values, and arrays.
+- [ ] Add `samples/ObjectLayouts` with inheritance, nested value types, multiple array forms, and boundary lengths.
+- [ ] Fill abandoned allocation-context tails with valid free objects.
+- [ ] Keep runtime-layout knowledge isolated from the generic collector model.
 
 ## Constraints
 

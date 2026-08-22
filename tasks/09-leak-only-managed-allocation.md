@@ -6,12 +6,12 @@ Run a managed program using Rust-owned allocation segments without reclaiming me
 
 ## Assignment
 
-- Reserve the collector heap and commit segments on demand.
-- Implement thread allocation contexts and aligned bump allocation.
-- Provide stable-address handle storage sufficient for startup and the smoke workload.
-- Initialize valid heap bounds, card-table state, and required write-barrier data.
-- Extend `samples/LoaderSmoke` with bounded small, large, pinned, and finalizable allocations.
-- Report allocation and commitment counters on shutdown.
+- [ ] Reserve the collector heap and commit segments on demand.
+- [ ] Implement thread allocation contexts and aligned bump allocation.
+- [ ] Provide stable-address handle storage sufficient for startup and the smoke workload.
+- [ ] Initialize valid heap bounds, card-table state, and required write-barrier data.
+- [ ] Extend `samples/LoaderSmoke` with bounded small, large, pinned, and finalizable allocations.
+- [ ] Report allocation and commitment counters on shutdown.
 
 ## Constraints
 

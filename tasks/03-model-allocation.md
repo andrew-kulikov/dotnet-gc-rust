@@ -6,11 +6,11 @@ Allocate aligned model objects and reconstruct their boundaries by walking raw a
 
 ## Assignment
 
-- Define a compact model object header and a test-only layout descriptor for reference slots.
-- Add aligned bump allocation within a region.
-- Represent unused tails so the region always remains walkable.
-- Implement forward walking from region start to allocation frontier.
-- Add generated allocation sequences with different sizes and alignments.
+- [ ] Define a compact model object header and a test-only layout descriptor for reference slots.
+- [ ] Add aligned bump allocation within a region.
+- [ ] Represent unused tails so the region always remains walkable.
+- [ ] Implement forward walking from region start to allocation frontier.
+- [ ] Add generated allocation sequences with different sizes and alignments.
 
 ## Constraints
 

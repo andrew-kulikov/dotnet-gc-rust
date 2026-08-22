@@ -6,11 +6,11 @@ Implement ordinary and critical finalization with correct weak-reference and res
 
 ## Assignment
 
-- Implement registration, suppression, re-registration, and f-reachable queues.
-- Preserve unreachable finalizable objects long enough for the runtime finalizer thread.
-- Support critical finalizers required by the pinned runtime.
-- Add `samples/GcFeatures` cases for ordering, exceptions, suppression, resurrection, and repeated collections.
-- Add sync-block weak-pointer scanning and eager-finalization behavior required by the supported matrix.
+- [ ] Implement registration, suppression, re-registration, and f-reachable queues.
+- [ ] Preserve unreachable finalizable objects long enough for the runtime finalizer thread.
+- [ ] Support critical finalizers required by the pinned runtime.
+- [ ] Add `samples/GcFeatures` cases for ordering, exceptions, suppression, resurrection, and repeated collections.
+- [ ] Add sync-block weak-pointer scanning and eager-finalization behavior required by the supported matrix.
 
 ## Constraints
 

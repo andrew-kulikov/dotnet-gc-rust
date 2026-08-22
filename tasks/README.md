@@ -10,7 +10,7 @@ This directory turns the project roadmap into a CodeCrafters-style sequence. Eac
 4. Update tests, invariants, and the engineering log as part of the iteration.
 5. Run the self-check and commit only files relevant to the capability.
 6. Ask an agent to review the result using [REVIEW_GUIDE.md](REVIEW_GUIDE.md). The agent verifies; it does not implement missing work unless explicitly asked.
-7. Mark the task complete only after all required findings are resolved or recorded as an explicit limitation.
+7. Mark the completed Assignment items in the task checklist only after all required findings are resolved or recorded as an explicit limitation.
 
 ## Sequence
 
@@ -44,4 +44,4 @@ The calendar in `ROADMAP.md` remains the schedule. These iterations are checkpoi
 
 ## Progress convention
 
-Do not edit task files merely to record personal progress. Track completion in GitHub issues, pull requests, or `docs/weekly/`. This keeps the exercises reusable for other learners.
+Use the Assignment checklists to record repository-level implementation progress. Track personal notes and broader planning in GitHub issues, pull requests, or `docs/weekly/`.

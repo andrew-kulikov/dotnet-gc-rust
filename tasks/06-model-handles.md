@@ -6,11 +6,11 @@ Learn handle semantics in isolation before mapping CoreCLR's handle manager.
 
 ## Assignment
 
-- Add stable handle IDs and storage for strong, weak, and dependent handles.
-- Treat strong targets as roots.
-- Clear weak targets when their objects are not otherwise reachable.
-- Implement dependent-handle reachability to a fixed point.
-- Define and test the ordering of marking, dependent processing, and weak clearing.
+- [ ] Add stable handle IDs and storage for strong, weak, and dependent handles.
+- [ ] Treat strong targets as roots.
+- [ ] Clear weak targets when their objects are not otherwise reachable.
+- [ ] Implement dependent-handle reachability to a fixed point.
+- [ ] Define and test the ordering of marking, dependent processing, and weak clearing.
 
 ## Constraints
 

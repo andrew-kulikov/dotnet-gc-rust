@@ -6,11 +6,11 @@ Discover references from non-victim regions into victim regions without scanning
 
 ## Assignment
 
-- Turn write-barrier card updates into region-local dirty-card information.
-- Scan dirty cards conservatively for possible references into selected victims.
-- Define when cards are cleared, retained, or rescanned.
-- Add cross-region mutation workloads and a slow full-edge oracle.
-- Measure dirty-card density and abandon partial collection when scanning it is more expensive than a full collection.
+- [ ] Turn write-barrier card updates into region-local dirty-card information.
+- [ ] Scan dirty cards conservatively for possible references into selected victims.
+- [ ] Define when cards are cleared, retained, or rescanned.
+- [ ] Add cross-region mutation workloads and a slow full-edge oracle.
+- [ ] Measure dirty-card density and abandon partial collection when scanning it is more expensive than a full collection.
 
 ## Constraints
 

@@ -6,12 +6,12 @@ Create a clean, reproducible repository skeleton before implementing collector b
 
 ## Assignment
 
-- Pin stable Rust and one .NET 10 SDK/runtime version.
-- Create the Cargo workspace and placeholder crates described in `README.md`.
-- Create `samples/LoaderSmoke` as a minimal console application.
-- Add formatting, lint, test, and managed-build commands to Windows CI.
-- Add a license, contribution guide, security policy, and a short local setup guide.
-- Ensure build outputs and local diagnostics are ignored.
+- [ ] Pin stable Rust and one .NET 10 SDK/runtime version.
+- [x] Create the Cargo workspace and placeholder crates described in `README.md`.
+- [x] Create `samples/LoaderSmoke` as a minimal console application.
+- [ ] Add formatting, lint, test, and managed-build commands to Windows CI.
+- [ ] Add a license, contribution guide, security policy, and a short local setup guide.
+- [x] Ensure build outputs and local diagnostics are ignored.
 
 ## Constraints
 

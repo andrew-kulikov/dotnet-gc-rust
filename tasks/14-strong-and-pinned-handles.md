@@ -6,11 +6,11 @@ Preserve objects referenced by strong and pinned runtime handles with correct no
 
 ## Assignment
 
-- Implement creation, update, enumeration, and destruction for strong and pinned handles.
-- Add these targets to the appropriate root-processing phase.
-- Preserve stable handle identity as handle storage grows.
-- Extend `samples/GcFeatures` with normal handles and pinned buffers used across forced collections.
-- Verify that pinned flags and addresses are reported consistently even though the baseline collector never moves objects.
+- [ ] Implement creation, update, enumeration, and destruction for strong and pinned handles.
+- [ ] Add these targets to the appropriate root-processing phase.
+- [ ] Preserve stable handle identity as handle storage grows.
+- [ ] Extend `samples/GcFeatures` with normal handles and pinned buffers used across forced collections.
+- [ ] Verify that pinned flags and addresses are reported consistently even though the baseline collector never moves objects.
 
 ## Constraints
 

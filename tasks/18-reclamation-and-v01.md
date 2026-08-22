@@ -6,12 +6,12 @@ Reuse real managed heap space safely and publish a reproducible baseline collect
 
 ## Assignment
 
-- Connect swept free objects to the verified segregated free lists.
-- Split and coalesce free objects while maintaining the interior-pointer index.
-- Decommit wholly free regions after a delay and retain a bounded reuse cache.
-- Add low-memory, allocation-failure, fragmentation, and long soak workloads.
-- Inventory unsafe code, supported features, limitations, and debugging procedures.
-- Reproduce build and tests from a clean checkout before tagging `v0.1.0`.
+- [ ] Connect swept free objects to the verified segregated free lists.
+- [ ] Split and coalesce free objects while maintaining the interior-pointer index.
+- [ ] Decommit wholly free regions after a delay and retain a bounded reuse cache.
+- [ ] Add low-memory, allocation-failure, fragmentation, and long soak workloads.
+- [ ] Inventory unsafe code, supported features, limitations, and debugging procedures.
+- [ ] Reproduce build and tests from a clean checkout before tagging `v0.1.0`.
 
 ## Constraints
 

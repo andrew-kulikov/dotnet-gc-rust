@@ -6,12 +6,12 @@ Select a bounded set of victim regions in the pure-Rust model and prove partial-
 
 ## Assignment
 
-- Add per-region live-byte estimates, age, free-space quality, and dirty-reference cost inputs.
-- Define `Throughput`, `Interactive`, and `FrameBudget` policy modes.
-- Select victim regions under an estimated work budget.
-- Mark and sweep only victims while preserving objects reachable from roots or non-victim regions.
-- Fall back to a full collection under memory pressure or unproductive partial work.
-- Compare estimates with measured model work on generated graphs.
+- [ ] Add per-region live-byte estimates, age, free-space quality, and dirty-reference cost inputs.
+- [ ] Define `Throughput`, `Interactive`, and `FrameBudget` policy modes.
+- [ ] Select victim regions under an estimated work budget.
+- [ ] Mark and sweep only victims while preserving objects reachable from roots or non-victim regions.
+- [ ] Fall back to a full collection under memory pressure or unproductive partial work.
+- [ ] Compare estimates with measured model work on generated graphs.
 
 ## Constraints
 
