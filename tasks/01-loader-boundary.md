@@ -6,12 +6,30 @@ Prove that the pinned CoreCLR reaches the custom collector boundary. Failure aft
 
 ## Assignment
 
-- [x] Record the exact runtime source commit whose GC headers are used.
-- [x] Build the thin C++ interface shim and Rust `cdylib` with a narrow C ABI between them.
-- [x] Implement the standalone-GC version and initialization entry points.
-- [x] Make initialization emit a deterministic diagnostic and return a deliberate failure.
-- [x] Add a command that launches `samples/LoaderSmoke` with the custom GC selected.
-- [ ] Write ADR-0001 describing why the project uses a C++ ABI shim and what remains owned by Rust.
+- [x] **Record the runtime contract being compiled against.** Pin the exact
+  `dotnet/runtime` commit, make the required GC headers available from that checkout, and
+  fail the build if the checkout is missing or at a different revision. The installed
+  CoreCLR used by the smoke test must belong to the same supported runtime release.
+- [x] **Build a thin C++ shim and a Rust `cdylib`.** The C++ DLL may include CoreCLR's C++
+  interface headers, while Rust exposes only a small `extern "C"` API made from
+  fixed-layout values, pointers, and integer result codes. Prove the boundary in both the
+  compiler/linker setup and one actual C++-to-Rust call.
+- [x] **Export the two standalone-GC loader entry points.** Implement
+  `GC_VersionInfo` with the pinned interface version and `GC_Initialize` with the exact
+  calling convention and parameter types from the pinned header. Export inspection must
+  find their undecorated names in the final shim DLL.
+- [x] **Stop deliberately after crossing the boundary.** Have `GC_Initialize` call the
+  Rust probe, emit one deterministic native diagnostic, set every output parameter to a
+  safe empty value, and return a failure `HRESULT`. At this stage, failing initialization
+  is correct; returning fake interface pointers is not.
+- [x] **Add one command that exercises the real CoreCLR loader.** Build both native
+  libraries, place dependent DLLs together, set the standalone-GC configuration for only
+  the child process, and launch `LoaderSmoke`. The command should distinguish the expected
+  project diagnostic from a missing DLL, missing export, version mismatch, or crash.
+- [ ] **Write ADR-0001 for the ABI ownership decision.** Explain why CoreCLR's C++ virtual
+  interfaces stay in C++, why Rust receives a narrow C ABI, which side owns collector
+  state, and how panics/exceptions are contained. Record direct Rust implementation of
+  MSVC vtables as the rejected alternative.
 
 ## Constraints
 

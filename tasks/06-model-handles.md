@@ -6,11 +6,28 @@ Learn handle semantics in isolation before mapping CoreCLR's handle manager.
 
 ## Assignment
 
-- [ ] Add stable handle IDs and storage for strong, weak, and dependent handles.
-- [ ] Treat strong targets as roots.
-- [ ] Clear weak targets when their objects are not otherwise reachable.
-- [ ] Implement dependent-handle reachability to a fixed point.
-- [ ] Define and test the ordering of marking, dependent processing, and weak clearing.
+- [ ] **Create stable, validated handle identities.** A strong or weak handle contains one
+  optional target; a dependent handle contains a primary and secondary target. Growing or
+  relocating the Rust container must not change a live `HandleId`, and a destroyed ID must
+  not accidentally address a newly created handle. Creation, lookup, update, and destroy
+  operations should report stale or wrong-kind IDs cleanly.
+- [ ] **Feed strong handles into the normal root phase.** A non-null strong target keeps
+  its object alive exactly like a root supplied by the model VM. Duplicate strong handles
+  should not change the result, and invalid targets should be diagnosed as corruption
+  rather than silently retained or ignored.
+- [ ] **Clear weak handles before their target storage is reused.** A weak handle observes
+  an object but does not make it live. After ordinary marking and dependent processing,
+  replace the target with `None` when it is still unmarked, and prove that no public handle
+  lookup can return an object after sweep has reclaimed that object.
+- [ ] **Process dependent handles to a fixed point.** If a dependent handle's primary is
+  live, its secondary becomes live; the secondary may then make another dependent
+  primary live, requiring another pass. Continue until a complete pass discovers nothing
+  new. A secondary never keeps its own primary alive, and an unreachable primary/secondary
+  pair must not survive just because the handle exists.
+- [ ] **Make phase ordering an explicit part of the API and tests.** Write down and encode
+  the sequence: seed ordinary/strong roots, trace, process dependent handles until stable,
+  clear weak handles, then sweep. Reject invalid phase transitions and test chains, cycles,
+  null targets, destroyed handles, and mutations between collections.
 
 ## Constraints
 

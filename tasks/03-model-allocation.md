@@ -6,11 +6,27 @@ Allocate aligned model objects and reconstruct their boundaries by walking raw a
 
 ## Assignment
 
-- [ ] Define a compact model object header and a test-only layout descriptor for reference slots.
-- [ ] Add aligned bump allocation within a region.
-- [ ] Represent unused tails so the region always remains walkable.
-- [ ] Implement forward walking from region start to allocation frontier.
-- [ ] Add generated allocation sequences with different sizes and alignments.
+- [ ] **Define a self-describing object format for the model heap.** Give every allocated
+  object a compact encoded header containing enough information for a walker to find the
+  next object, such as total object size and a model layout identifier. Keep a separate
+  test-VM layout descriptor that says which payload slots contain `ObjectId` references;
+  this is a teaching format and must not pretend to be CoreCLR's real object header.
+- [ ] **Allocate by advancing a per-region frontier.** Given payload size and alignment,
+  calculate the aligned object start and checked end, ensure the whole encoded object fits
+  in one region, initialize it, and only then commit the new frontier. A failed request
+  must leave both storage and frontier observably unchanged.
+- [ ] **Make padding and abandoned tails representable.** Alignment gaps and space left
+  when a region can no longer satisfy a request cannot be mysterious bytes that stop a
+  future heap walk. Encode them as a valid padding/free record, or define another explicit
+  representation that lets the walker advance over every byte up to the frontier.
+- [ ] **Walk objects from storage rather than allocator bookkeeping.** Starting at a
+  region boundary, decode the current header, validate size/alignment/range, yield the
+  object, and advance by its encoded size until the frontier. Reject zero progress,
+  truncated headers, impossible sizes, and records crossing the region boundary.
+- [ ] **Generate varied allocation histories.** Property tests should mix small and
+  boundary-sized objects, different valid alignments, nearly full regions, and failed
+  requests. Keep an expected list only in the test oracle and compare it with the objects
+  reconstructed by the real walker.
 
 ## Constraints
 

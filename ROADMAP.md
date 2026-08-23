@@ -37,7 +37,7 @@ Tasks:
    - a thin C++ ABI shim plus a stable C ABI into Rust (recommended), and
    - hand-built MSVC C++ vtables in pure Rust (rejected unless a contained experiment proves it maintainable).
 7. Add Windows CI for the loader smoke test and cross-platform CI for `gc-core`.
-8. Add `LICENSE`, `CONTRIBUTING.md`, `SECURITY.md`, code-format checks, and dependency/license auditing before making the repository public.
+8. Document the minimal local setup and add repeatable code-format, lint, Rust-test, native-build, and managed-build checks to Windows CI.
 
 Exit criteria:
 
