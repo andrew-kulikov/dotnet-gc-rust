@@ -71,6 +71,9 @@ This crate may depend on `gc-core`, but `gc-core` must not depend on it.
 
 ### `gc-ffi` and `native-shim`
 
+The ownership and unwind rules for this boundary are an accepted invariant,
+recorded in [Loader-boundary decision](LOADER_BOUNDARY.md).
+
 CoreCLR passes C++ virtual interfaces across the GC boundary. Rust has no stable C++ ABI, and hand-writing MSVC vtables would couple correctness to undocumented compiler details. The default design is therefore:
 
 - C++ implements the exact interfaces from the pinned CoreCLR headers.

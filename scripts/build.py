@@ -35,7 +35,8 @@ def run(
     capture_output: bool = False,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    print(f"+ {display_command(command)}", flush=True)
+    # change color to green for the command, then reset to default color for the output
+    print(f"\n\033[32m{display_command(command)}\033[0m\n", flush=True)
     return subprocess.run(
         command,
         cwd=cwd,

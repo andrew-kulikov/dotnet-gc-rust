@@ -31,7 +31,7 @@ from a library that loads and deliberately refuses initialization.
   failure `HRESULT`.
 - [x] Add one smoke command that builds both DLLs, verifies exports, launches the
   real managed executable, and recognizes the expected failure.
-- [ ] Record the boundary decision in a short engineering note: C++ owns only the
+- [x] Record the boundary decision in a short engineering note: C++ owns only the
   virtual-interface adapter; Rust will own collector state and policy; neither
   panic nor exception may cross the boundary.
 
