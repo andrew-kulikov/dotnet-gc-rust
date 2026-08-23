@@ -17,6 +17,8 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SUBMODULE_PATH = Path("external/dotnet-runtime")
 SPARSE_PATHS = ("src/coreclr/gc", "src/coreclr/inc", "src/native")
 LOADER_DIAGNOSTIC = "dotnet-gc-rust: native shim reached Rust"
+LOADER_SMOKE_OUTPUT = "Hello, World!"
+MIRI_TOOLCHAIN = "nightly-2026-08-17"
 
 
 def display_command(command: list[str]) -> str:
@@ -275,12 +277,67 @@ def verify_exports(
     print("Verified exports: GC_Initialize, GC_VersionInfo")
 
 
-def smoke(configuration: str) -> None:
-    shim = build(configuration)
+def clean_stock_gc_environment() -> dict[str, str]:
+    """Return the environment used by managed checks that must use the stock GC."""
     environment = os.environ.copy()
     for key in list(environment):
         if key.casefold() in {"dotnet_gcpath", "dotnet_gcname"}:
             del environment[key]
+    return environment
+
+
+def verify() -> None:
+    """Run the repeatable Windows checks that do not need the nightly Miri toolchain."""
+    run(["cargo", "fmt", "--all", "--", "--check"])
+    run(
+        [
+            "cargo",
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--locked",
+            "--",
+            "-D",
+            "warnings",
+        ]
+    )
+    run(["cargo", "test", "--workspace", "--locked"])
+
+    environment = clean_stock_gc_environment()
+    project = REPOSITORY_ROOT / "samples/LoaderSmoke/LoaderSmoke.csproj"
+    run(["dotnet", "build", str(project)], env=environment)
+    result = run(
+        ["dotnet", "run", "--no-build", "--project", str(project)],
+        env=environment,
+        capture_output=True,
+    )
+    if result.stdout.strip() != LOADER_SMOKE_OUTPUT or result.stderr:
+        raise RuntimeError(
+            "the stock-GC LoaderSmoke output did not match "
+            f"{LOADER_SMOKE_OUTPUT!r}"
+        )
+    print(f"Stock-GC LoaderSmoke output: {LOADER_SMOKE_OUTPUT}")
+
+
+def miri() -> None:
+    """Run the FFI-free gc-core tests under the pinned nightly Miri interpreter."""
+    run(["cargo", f"+{MIRI_TOOLCHAIN}", "miri", "setup"])
+    run(
+        [
+            "cargo",
+            f"+{MIRI_TOOLCHAIN}",
+            "miri",
+            "test",
+            "--locked",
+            "-p",
+            "gc-core",
+        ]
+    )
+
+
+def smoke(configuration: str) -> None:
+    shim = build(configuration)
+    environment = clean_stock_gc_environment()
 
     project = REPOSITORY_ROOT / "samples/LoaderSmoke/LoaderSmoke.csproj"
     run(["dotnet", "build", str(project)], env=environment)
@@ -311,6 +368,10 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("bootstrap", help="initialize the pinned runtime submodule")
+    subparsers.add_parser(
+        "verify", help="run formatting, lint, Rust tests, and the stock-GC sample"
+    )
+    subparsers.add_parser("miri", help="run gc-core tests under the pinned Miri")
 
     for command in ("build", "smoke"):
         command_parser = subparsers.add_parser(command)
@@ -327,6 +388,10 @@ def main() -> int:
     try:
         if arguments.command == "bootstrap":
             bootstrap()
+        elif arguments.command == "verify":
+            verify()
+        elif arguments.command == "miri":
+            miri()
         elif arguments.command == "build":
             build(arguments.configuration)
         else:

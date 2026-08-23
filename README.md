@@ -115,6 +115,63 @@ Run Miri only on the runtime-independent crate:
 cargo +nightly-2026-08-17 miri test -p gc-core
 ```
 
+## .NET toolchain
+
+`global.json` selects SDK `10.0.400` with SDK roll-forward disabled. The
+managed smoke project separately requests `Microsoft.NETCore.App` `10.0.11`
+with runtime roll-forward disabled, so a missing or different patch fails
+instead of silently loading another CoreCLR. The native shim's CoreCLR headers
+come from the `external/dotnet-runtime` submodule at the .NET `v10.0.11`
+commit `79d0c463f1b55624c874a11585f7e47731e8d675`.
+
+Install the .NET 10.0.400 SDK and the .NET 10.0.11 x64 runtime. Verify the
+selected SDK and installed runtime from the repository root:
+
+```powershell
+dotnet --version
+dotnet --list-runtimes
+```
+
+Expected entries include `10.0.400` and `Microsoft.NETCore.App 10.0.11`.
+`dotnet --info` reports the host used to launch the CLI; it is not evidence of
+the runtime loaded by `LoaderSmoke`.
+
+## Local verification
+
+On Windows x64, install Python 3, Visual Studio with the MSVC x64 build tools,
+and CMake (or use the Visual Studio-bundled CMake) before building the native
+shim. Bootstrap its pinned submodule once:
+
+```powershell
+python scripts/build.py bootstrap
+```
+
+The Windows automation entry point for the repeatable baseline checks is:
+
+```powershell
+python scripts/build.py verify
+```
+
+It runs Rust formatting, Clippy, workspace tests, the managed build, and the
+stock-GC `LoaderSmoke` check. Run the pinned nightly Miri check separately:
+
+```powershell
+python scripts/build.py miri
+```
+
+The native loader-boundary smoke builds the shim and intentionally fails once
+CoreCLR enters the shim; that failure is the expected red baseline:
+
+```powershell
+python scripts/build.py smoke
+```
+
+The stock-GC sample's stable successful output is:
+
+```text
+Hello, World!
+```
+
 ### Miri demonstration
 
 `gc-core` contains an ignored teaching test with a deliberate use-after-free. An ordinary test run compiles it but does not execute it:

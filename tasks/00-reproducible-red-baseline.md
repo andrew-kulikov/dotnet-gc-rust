@@ -22,18 +22,18 @@ Do not add GC code while doing this mission.
 
 ## Your challenge
 
-- [ ] Pin the Rust compiler through `rust-toolchain.toml` and the workspace
+- [x] Pin the Rust compiler through `rust-toolchain.toml` and the workspace
   `rust-version`.
-- [ ] Select one .NET 10 SDK through `global.json`. Separately record the exact
+- [x] Select one .NET 10 SDK through `global.json`. Separately record the exact
   .NET 10 runtime/CoreCLR build used by native smoke tests; `global.json` pins an
   SDK, not the runtime loaded into the sample process.
 - [x] Keep the initial Cargo crates compiling as empty responsibility boundaries
   rather than speculative collector APIs.
 - [x] Build and run `samples/LoaderSmoke` with the stock GC and record its stable
   success output.
-- [ ] Provide repository commands for formatting, Clippy, Rust tests, Miri on
+- [x] Provide repository commands for formatting, Clippy, Rust tests, Miri on
   `gc-core`, and the managed build. Run the repeatable subset in Windows CI.
-- [ ] Document only the local prerequisites and verification commands needed to
+- [x] Document only the local prerequisites and verification commands needed to
   build the project.
 - [x] Ignore Cargo, CMake, MSBuild, managed, dump, and trace outputs so the
   documented checks leave the worktree clean.
