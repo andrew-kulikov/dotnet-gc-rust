@@ -4,7 +4,7 @@ The list is ordered for this project rather than by prestige. Read only what sup
 
 ## Primary path: the MiniDump series
 
-Kevin Gosse's series is the closest implementation guide to this project. Read the matching part immediately before its roadmap milestone, then inspect the tagged source for details that the article omits.
+Kevin Gosse's series is the closest implementation guide to this project. Read the matching part immediately before the mission that needs it, then inspect the tagged source for details that the article omits.
 
 1. [Part 1 — project setup and standalone GC loading](https://minidump.net/2025-28-01-writing-a-net-gc-in-c-part-1/)
 2. [Part 2 — minimal allocating GC, allocation contexts, handles, and write barrier](https://minidump.net/writing-a-net-gc-in-c-part-2/)
@@ -120,16 +120,18 @@ Benchmark warnings:
 - Test clustered deaths and scattered deaths; compaction and free-list policies react very differently.
 - Keep Satori results optional and record the exact fork commit and runtime build.
 
-## Suggested reading sequence by roadmap
+## Suggested reading sequence by mission horizon
 
-| Milestone | Read first | Keep open while coding |
+Read for the problem currently being observed, not for the final collector in
+advance.
+
+| Missions | Read first | Keep open while experimenting |
 | --- | --- | --- |
-| 0 | MiniDump 1; standalone loader design | `gcinterface.h`, Rustonomicon FFI |
-| 1-2 | GC Handbook tracing and mark-sweep chapters | MMTk tutorial, Miri, unsafe guidelines |
-| 3 | MiniDump 2 and 4 | `gcinterface.ee.h`, UpsilonGC |
-| 4 | MiniDump 3 and 5 | `gcdesc.h`, ManagedDotnetGC fixtures |
-| 5 | MiniDump 6 | CoreCLR GC design, `gc.cpp` |
-| 6 | MiniDump 7-10 | Pro .NET Memory Management, runtime source |
-| 7 | GC Handbook allocation/fragmentation; Immix | MMTk spaces/policies |
-| 8-9 | Satori README/source; LXR; Unity incremental GC | discussion 115627, benchmark tools |
-
+| 00-02 | MiniDump 1; standalone loader design | pinned `gcinterface.h`; Rustonomicon FFI |
+| 03-04 | MiniDump 2; Pro .NET Memory Management “Custom GC” | pinned `gcinterface.ee.h`; ZeroGC/UpsilonGC |
+| 05-07 | GC Handbook tracing and mark-sweep introduction | Miri; a simple independent graph oracle |
+| 08-12 | GC Handbook allocation, sweep, and free-space chapters | MMTk tutorial; unsafe guidelines |
+| 13-14 | MiniDump 2 and 4; Pro .NET allocation and virtual-memory chapters | Windows VM documentation; pinned runtime allocator paths |
+| 15-16 | MiniDump 3-5 | pinned object-layout sources, `gcdesc.h`, fixture diagnostics |
+| 17-19 | MiniDump 6; CoreCLR GC design | pinned `gc.cpp`; suspension/root callbacks |
+| Future only | MiniDump 7-10, then allocation/fragmentation and regional literature as needed | Satori, LXR, Unity incremental GC, benchmark tools |

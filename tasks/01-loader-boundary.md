@@ -1,53 +1,68 @@
-# Iteration 01 — Loader boundary
+# Mission 01 - Cross the loader boundary
 
-## Goal
+## Where you are
 
-Prove that the pinned CoreCLR reaches the custom collector boundary. Failure after reaching the boundary is the expected result.
+The stock sample and repository toolchain have a reproducible checkpoint. The
+custom collector does not yet participate in startup.
 
-## Assignment
+## The problem
 
-- [x] **Record the runtime contract being compiled against.** Pin the exact
-  `dotnet/runtime` commit, make the required GC headers available from that checkout, and
-  fail the build if the checkout is missing or at a different revision. The installed
-  CoreCLR used by the smoke test must belong to the same supported runtime release.
-- [x] **Build a thin C++ shim and a Rust `cdylib`.** The C++ DLL may include CoreCLR's C++
-  interface headers, while Rust exposes only a small `extern "C"` API made from
-  fixed-layout values, pointers, and integer result codes. Prove the boundary in both the
-  compiler/linker setup and one actual C++-to-Rust call.
-- [x] **Export the two standalone-GC loader entry points.** Implement
-  `GC_VersionInfo` with the pinned interface version and `GC_Initialize` with the exact
-  calling convention and parameter types from the pinned header. Export inspection must
-  find their undecorated names in the final shim DLL.
-- [x] **Stop deliberately after crossing the boundary.** Have `GC_Initialize` call the
-  Rust probe, emit one deterministic native diagnostic, set every output parameter to a
-  safe empty value, and return a failure `HRESULT`. At this stage, failing initialization
-  is correct; returning fake interface pointers is not.
-- [x] **Add one command that exercises the real CoreCLR loader.** Build both native
-  libraries, place dependent DLLs together, set the standalone-GC configuration for only
-  the child process, and launch `LoaderSmoke`. The command should distinguish the expected
-  project diagnostic from a missing DLL, missing export, version mismatch, or crash.
-- [ ] **Write ADR-0001 for the ABI ownership decision.** Explain why CoreCLR's C++ virtual
-  interfaces stay in C++, why Rust receives a narrow C ABI, which side owns collector
-  state, and how panics/exceptions are contained. Record direct Rust implementation of
-  MSVC vtables as the rejected alternative.
+CoreCLR loads a standalone collector through exported C functions, then passes
+C++ virtual interfaces across the GC/EE boundary. Rust cannot safely guess the
+MSVC C++ vtable ABI. Before implementing a collector, prove that the pinned
+runtime can load a thin native shim and that the shim can call Rust.
 
-## Constraints
+## Observe first
 
-- Do not implement an allocator or return fake interface objects.
-- No Rust panic or C++ exception may cross an ABI boundary.
-- Do not depend on globally installed source files without checking their version.
+Read the pinned declarations of `GC_VersionInfo` and `GC_Initialize`. Run the
+sample once with an invalid `DOTNET_GCPath` and record how a missing DLL differs
+from a library that loads and deliberately refuses initialization.
 
-## Acceptance criteria
+## Your challenge
 
-- Export inspection shows the required standalone-GC entry points.
-- Running the sample proves that both the loader and initialization boundary were reached.
-- The process fails predictably with the project diagnostic, not an access violation or missing-symbol error.
-- CI builds the boundary against the pinned headers.
+- [x] Pin the exact `dotnet/runtime` source commit that supplies the GC headers
+  and make bootstrap reject a missing or locally modified checkout.
+- [x] Build a C++ DLL against those headers and a Rust `cdylib` exposing one
+  narrow `extern "C"` probe.
+- [x] Export `GC_VersionInfo` and `GC_Initialize` with the exact pinned calling
+  convention and interface version.
+- [x] Have `GC_Initialize` call Rust, initialize every output to a safe empty
+  value, emit one deterministic native diagnostic, and return a deliberate
+  failure `HRESULT`.
+- [x] Add one smoke command that builds both DLLs, verifies exports, launches the
+  real managed executable, and recognizes the expected failure.
+- [ ] Record the boundary decision in a short engineering note: C++ owns only the
+  virtual-interface adapter; Rust will own collector state and policy; neither
+  panic nor exception may cross the boundary.
+
+## Checkpoint
+
+```powershell
+python scripts/build.py smoke
+```
+
+The process reports the project diagnostic proving `CoreCLR -> C++ -> Rust`,
+then exits with the expected initialization failure. Missing-library,
+missing-export, access-violation, and version-mismatch failures do not count.
+
+## Allowed shortcuts
+
+- Initialization must fail.
+- No `IGCHeap` or handle implementation is needed.
+- Native logging may be minimal and allocation-free.
+
+## Known debt
+
+No interface pointer can be returned to CoreCLR, so managed startup cannot
+continue.
+
+## What this unlocks
+
+Mission 02 can return real interface objects and discover the next required
+operation from an actual runtime call rather than implementing an imagined
+startup sequence.
 
 ## Hints
 
-Keep callbacks boring and log without allocating on a path that may later become allocation-sensitive. A loader trace is stronger evidence than “the DLL was found.”
-
-## Agent review focus
-
-Ask the agent to verify symbol names, calling conventions, version negotiation, error handling, and agreement between the pinned headers and built runtime.
+Inspect the final DLL exports instead of trusting source spelling. Keep the
+runtime header commit and installed runtime release visibly paired.

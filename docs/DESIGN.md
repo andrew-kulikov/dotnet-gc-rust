@@ -1,6 +1,9 @@
 # Proposed design
 
-Status: planning, not an implementation contract.
+Status: architectural hypothesis, not an implementation contract or construction
+order. Learning missions may intentionally use a simpler design, discover its
+failure, and replace it. Promote a proposal from this document into a required
+invariant only when a current mission demonstrates the need.
 
 ## Design principles
 

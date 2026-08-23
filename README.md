@@ -24,7 +24,7 @@ The first complete release will target:
 
 The experimental second release will add a regional, frame-aware collection policy. It will cap the amount of heap work selected for one collection and allow a managed game loop to request collection at a safe point between frames. The intended trade-off is higher memory use and bookkeeping cost in exchange for a tighter pause distribution.
 
-See [ROADMAP.md](ROADMAP.md) for the implementation schedule, [tasks/README.md](tasks/README.md) for the hands-on learning path, [docs/DESIGN.md](docs/DESIGN.md) for the proposed architecture, and [docs/RESOURCES.md](docs/RESOURCES.md) for the reading list.
+See [ROADMAP.md](ROADMAP.md) for the high-level project direction, [tasks/README.md](tasks/README.md) for the experiment-driven learning missions, [docs/DESIGN.md](docs/DESIGN.md) for architectural hypotheses, and [docs/RESOURCES.md](docs/RESOURCES.md) for the reading list.
 
 ## Non-goals for 2026
 
