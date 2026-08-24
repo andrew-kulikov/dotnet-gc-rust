@@ -15,7 +15,6 @@ import sys
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SUBMODULE_PATH = Path("external/dotnet-runtime")
-SPARSE_PATHS = ("src/coreclr/gc", "src/coreclr/inc", "src/native")
 LOADER_DIAGNOSTIC = "dotnet-gc-rust: native shim reached Rust"
 LOADER_SMOKE_OUTPUT = "Hello, World!"
 MIRI_TOOLCHAIN = "nightly-2026-08-17"
@@ -62,22 +61,23 @@ def bootstrap() -> None:
     expected_commit = recorded_submodule_commit()
     submodule = REPOSITORY_ROOT / SUBMODULE_PATH
     interface_header = submodule / "src/coreclr/gc/gcinterface.h"
+    vm_source = submodule / "src/coreclr/vm/gcheaputilities.cpp"
 
     if (submodule / ".git").exists():
         current_commit = run(
             ["git", "rev-parse", "HEAD"], cwd=submodule, capture_output=True
         ).stdout.strip()
-        sparse_paths = run(
-            ["git", "sparse-checkout", "list"],
+        sparse_checkout = run(
+            ["git", "config", "--bool", "core.sparseCheckout"],
             cwd=submodule,
             capture_output=True,
             check=False,
         )
         if (
             current_commit == expected_commit
-            and sparse_paths.returncode == 0
-            and set(sparse_paths.stdout.splitlines()) == set(SPARSE_PATHS)
+            and sparse_checkout.stdout.strip() != "true"
             and interface_header.is_file()
+            and vm_source.is_file()
         ):
             print(f"dotnet/runtime is already bootstrapped at {expected_commit[:12]}")
             return
@@ -91,11 +91,7 @@ def bootstrap() -> None:
             )
 
     if not (submodule / ".git").exists():
-        # A first checkout may report Windows long-path errors before
-        # sparse-checkout is configured. Continue if Git created the submodule
-        # repository, then apply the sparse checkout and restore the recorded
-        # commit below.
-        update = run(
+        run(
             [
                 "git",
                 "-c",
@@ -105,18 +101,20 @@ def bootstrap() -> None:
                 "--init",
                 "--depth",
                 "1",
-                "--filter=blob:none",
                 "--",
                 SUBMODULE_PATH.as_posix(),
             ],
-            check=False,
         )
-        if update.returncode != 0 and not (submodule / ".git").exists():
-            raise RuntimeError("Git could not initialize the dotnet/runtime submodule")
 
     run(["git", "config", "core.longpaths", "true"], cwd=submodule)
-    run(["git", "sparse-checkout", "init", "--cone"], cwd=submodule)
-    run(["git", "sparse-checkout", "set", *SPARSE_PATHS], cwd=submodule)
+    sparse_checkout = run(
+        ["git", "config", "--bool", "core.sparseCheckout"],
+        cwd=submodule,
+        capture_output=True,
+        check=False,
+    )
+    if sparse_checkout.stdout.strip() == "true":
+        run(["git", "sparse-checkout", "disable"], cwd=submodule)
 
     commit_exists = run(
         ["git", "cat-file", "-e", f"{expected_commit}^{{commit}}"],
@@ -133,6 +131,8 @@ def bootstrap() -> None:
 
     if not interface_header.is_file():
         raise RuntimeError(f"expected CoreCLR header is missing: {interface_header}")
+    if not vm_source.is_file():
+        raise RuntimeError(f"expected CoreCLR VM source is missing: {vm_source}")
 
     print(f"Bootstrapped dotnet/runtime at {expected_commit[:12]}")
 

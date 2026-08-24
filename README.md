@@ -53,7 +53,7 @@ The C++ shim should contain no collection policy. It exists only because CoreCLR
 
 ## Native-shim toolchain (Windows x64)
 
-The native shim builds against the CoreCLR headers from the shallow `external/dotnet-runtime` submodule, pinned to the .NET 10.0.11 tag at commit `79d0c463f1b55624c874a11585f7e47731e8d675`. A sparse checkout keeps only the CoreCLR GC, CoreCLR include, and native support trees. Initialize it after cloning:
+The native shim builds against the full source checkout in the shallow `external/dotnet-runtime` submodule, pinned to the .NET 10.0.11 tag at commit `79d0c463f1b55624c874a11585f7e47731e8d675`. The complete runtime tree is kept locally for source navigation, while older Git history is omitted. Initialize it after cloning:
 
 ```console
 python scripts/build.py bootstrap
