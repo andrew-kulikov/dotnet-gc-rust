@@ -20,6 +20,11 @@ LOADER_SMOKE_OUTPUT = "Hello, World!"
 MIRI_TOOLCHAIN = "nightly-2026-08-17"
 
 
+def log(message: str, is_error: bool = False) -> None:
+    file = sys.stderr if is_error else sys.stdout
+    print(f"build-py: {message}", flush=True, file=file)
+
+
 def display_command(command: list[str]) -> str:
     if os.name == "nt":
         return subprocess.list2cmdline(command)
@@ -35,7 +40,7 @@ def run(
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     # change color to green for the command, then reset to default color for the output
-    print(f"\n\033[32m{display_command(command)}\033[0m\n", flush=True)
+    log(f"\033[32m{display_command(command)}\033[0m\n")
     return subprocess.run(
         command,
         cwd=cwd,
@@ -79,7 +84,7 @@ def bootstrap() -> None:
             and interface_header.is_file()
             and vm_source.is_file()
         ):
-            print(f"dotnet/runtime is already bootstrapped at {expected_commit[:12]}")
+            log(f"dotnet/runtime is already bootstrapped at {expected_commit[:12]}")
             return
 
         status = run(
@@ -134,7 +139,7 @@ def bootstrap() -> None:
     if not vm_source.is_file():
         raise RuntimeError(f"expected CoreCLR VM source is missing: {vm_source}")
 
-    print(f"Bootstrapped dotnet/runtime at {expected_commit[:12]}")
+    log(f"Bootstrapped dotnet/runtime at {expected_commit[:12]}")
 
 
 def locate_visual_studio() -> Path:
@@ -256,7 +261,7 @@ def build(configuration: str) -> Path:
     if not shim.is_file():
         raise RuntimeError(f"native shim was not produced: {shim}")
     verify_exports(shim, dumpbin, environment)
-    print(f"Built {shim}")
+    log(f"Built {shim}")
     return shim
 
 
@@ -275,7 +280,7 @@ def verify_exports(
     ]
     if missing:
         raise RuntimeError(f"native shim is missing exports: {', '.join(missing)}")
-    print("Verified exports: GC_Initialize, GC_VersionInfo")
+    log("Verified exports: GC_Initialize, GC_VersionInfo")
 
 
 def clean_stock_gc_environment() -> dict[str, str]:
@@ -317,7 +322,7 @@ def verify() -> None:
             "the stock-GC LoaderSmoke output did not match "
             f"{LOADER_SMOKE_OUTPUT!r}"
         )
-    print(f"Stock-GC LoaderSmoke output: {LOADER_SMOKE_OUTPUT}")
+    log(f"Stock-GC LoaderSmoke output: {LOADER_SMOKE_OUTPUT}")
 
 
 def miri() -> None:
@@ -362,7 +367,7 @@ def smoke(configuration: str) -> None:
     output = result.stdout + result.stderr
     if result.returncode == 0 or LOADER_DIAGNOSTIC not in output:
         raise RuntimeError("the loader did not reach the expected failing shim boundary")
-    print("Loader smoke test reached the expected deliberate initialization failure")
+    log("Loader smoke test reached the expected deliberate initialization failure")
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -398,7 +403,7 @@ def main() -> int:
         else:
             smoke(arguments.configuration)
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
-        print(f"error: {error}", file=sys.stderr)
+        log(f"error: {error}", is_error=True)
         return 1
     return 0
 
