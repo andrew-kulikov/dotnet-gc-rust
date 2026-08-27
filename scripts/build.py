@@ -18,6 +18,7 @@ SUBMODULE_PATH = Path("external/dotnet-runtime")
 LOADER_DIAGNOSTIC = "dotnet-gc-rust: native shim reached Rust"
 LOADER_SMOKE_OUTPUT = "Hello, World!"
 MIRI_TOOLCHAIN = "nightly-2026-08-17"
+SYMBOL_CACHE = Path(r"D:\\temp\\symbol-cache")
 
 
 def log(message: str, is_error: bool = False) -> None:
@@ -206,6 +207,28 @@ def locate_dumpbin(visual_studio: Path) -> Path:
     return candidates[0]
 
 
+def locate_debugging_tools() -> Path:
+    candidates: list[Path] = []
+    for variable in ("ProgramFiles(x86)", "ProgramFiles"):
+        root_text = os.environ.get(variable)
+        if not root_text:
+            continue
+        windows_kits = Path(root_text) / "Windows Kits"
+        candidates.extend(
+            sorted(windows_kits.glob("*/Debuggers/x64"), reverse=True)
+        )
+
+    for candidate in candidates:
+        if all(
+            (candidate / name).is_file()
+            for name in ("dbghelp.dll", "symsrv.dll")
+        ):
+            return candidate.resolve()
+    raise RuntimeError(
+        "Windows Debugging Tools with x64 dbghelp.dll and symsrv.dll were not found"
+    )
+
+
 def select_visual_studio_generator(cmake: Path) -> str:
     result = run([str(cmake), "--help"], capture_output=True)
     generators = re.findall(r"Visual Studio \d+ \d+", result.stdout)
@@ -341,14 +364,31 @@ def miri() -> None:
     )
 
 
-def smoke(configuration: str) -> None:
+def smoke(configuration: str, symbol_server: str | None) -> None:
     shim = build(configuration)
     environment = clean_stock_gc_environment()
+
+    if symbol_server is not None:
+        SYMBOL_CACHE.mkdir(parents=True, exist_ok=True)
+        symbol_server_path = f"srv*{SYMBOL_CACHE}*{symbol_server}"
+        existing_symbol_path = environment.get("_NT_SYMBOL_PATH")
+        environment["_NT_SYMBOL_PATH"] = os.pathsep.join(
+            part
+            for part in (existing_symbol_path, symbol_server_path)
+            if part
+        )
+        log(f"Native symbol path: {environment['_NT_SYMBOL_PATH']}")
 
     project = REPOSITORY_ROOT / "samples/LoaderSmoke/LoaderSmoke.csproj"
     run(["dotnet", "build", str(project)], env=environment)
 
     sample = REPOSITORY_ROOT / "samples/LoaderSmoke/bin/Debug/net10.0/LoaderSmoke.exe"
+    if symbol_server is not None:
+        debugging_tools = locate_debugging_tools()
+        for library in ("dbghelp.dll", "symsrv.dll"):
+            shutil.copy2(debugging_tools / library, sample.parent / library)
+        log(f"Using DbgHelp and SymSrv from {debugging_tools}")
+
     environment["DOTNET_GCPath"] = str(shim)
     environment["PATH"] = f"{shim.parent}{os.pathsep}{environment.get('PATH', '')}"
     result = run(
@@ -386,6 +426,16 @@ def parse_arguments() -> argparse.Namespace:
             choices=("debug", "release"),
             default="debug",
         )
+
+        if command == "smoke":
+            command_parser.add_argument(
+                "--symbol-server",
+                metavar="ADDRESS",
+                help=(
+                    "symbol server address used by DbgHelp; downloaded symbols "
+                    f"are cached under {SYMBOL_CACHE}"
+                ),
+            )
     return parser.parse_args()
 
 
@@ -401,7 +451,7 @@ def main() -> int:
         elif arguments.command == "build":
             build(arguments.configuration)
         else:
-            smoke(arguments.configuration)
+            smoke(arguments.configuration, arguments.symbol_server)
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
         log(f"error: {error}", is_error=True)
         return 1

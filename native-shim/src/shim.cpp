@@ -2,6 +2,9 @@
 #include <cstdlib>
 #include <type_traits>
 
+#include <Windows.h>
+#include <DbgHelp.h>
+
 #include "common.h"
 #include "gcenv.h"
 
@@ -24,17 +27,124 @@ void WriteInitializationDiagnostic() noexcept
     std::fflush(stderr);
 }
 
-// ----------------------------------------------------------------------
-// IGCHeap interface implementation for the native shim.
-// ----------------------------------------------------------------------
+// ------------------------------------------------------
+// Debugging helpers for the native shim. These are not used in production code.
+// ------------------------------------------------------
+void PrintStackTrace() noexcept
+{
+    HANDLE process = GetCurrentProcess();
+
+    SymSetOptions(
+        SYMOPT_UNDNAME |
+        SYMOPT_DEFERRED_LOADS |
+        SYMOPT_LOAD_LINES);
+
+    if (!SymInitialize(process, nullptr, TRUE))
+    {
+        std::fprintf(
+            stderr,
+            "SymInitialize failed: %lu\n",
+            GetLastError());
+        return;
+    }
+
+    void* frames[32];
+    const USHORT frameCount = CaptureStackBackTrace(
+        2, // пропустить PrintStackTrace и AbortUnimplemented
+        _countof(frames),
+        frames,
+        nullptr);
+
+    std::fprintf(stderr, "Stack trace:\n");
+
+    for (USHORT i = 0; i < frameCount; ++i)
+    {
+        const DWORD64 address =
+            reinterpret_cast<DWORD64>(frames[i]);
+
+        alignas(SYMBOL_INFO)
+        char symbolBuffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME]{};
+
+        auto* symbol =
+            reinterpret_cast<SYMBOL_INFO*>(symbolBuffer);
+
+        symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+        symbol->MaxNameLen = MAX_SYM_NAME;
+
+        DWORD64 symbolDisplacement = 0;
+
+        if (SymFromAddr(
+                process,
+                address,
+                &symbolDisplacement,
+                symbol))
+        {
+            std::fprintf(
+                stderr,
+                "  #%u %s + 0x%llx",
+                i,
+                symbol->Name,
+                static_cast<unsigned long long>(
+                    symbolDisplacement));
+
+            IMAGEHLP_LINE64 line{};
+            line.SizeOfStruct = sizeof(line);
+
+            DWORD lineDisplacement = 0;
+            if (SymGetLineFromAddr64(
+                    process,
+                    address,
+                    &lineDisplacement,
+                    &line))
+            {
+                std::fprintf(
+                    stderr,
+                    " (%s:%lu)",
+                    line.FileName,
+                    line.LineNumber);
+            }
+
+            std::fprintf(stderr, "\n");
+        }
+        else
+        {
+            IMAGEHLP_MODULE64 module{};
+            module.SizeOfStruct = sizeof(module);
+
+            if (SymGetModuleInfo64(process, address, &module))
+            {
+                std::fprintf(
+                    stderr,
+                    "  #%u %s + 0x%llx\n",
+                    i,
+                    module.ModuleName,
+                    static_cast<unsigned long long>(
+                        address - module.BaseOfImage));
+            }
+            else
+            {
+                std::fprintf(
+                    stderr,
+                    "  #%u 0x%llx\n",
+                    i,
+                    static_cast<unsigned long long>(address));
+            }
+        }
+    }
+}
+
 template<typename ReturnType>
-[[noreturn]] ReturnType AbortUnimplemented(const char* method) noexcept
+[[noreturn]] ReturnType AbortUnimplemented(
+    const char* method,
+    const char* signature) noexcept
 {
     std::fprintf(
         stderr,
-        "dotnet-gc-rust: unimplemented IGCHeap method called: %s\n",
-        method);
+        "dotnet-gc-rust: unimplemented method called: %s (%s)\n",
+        method,
+        signature);
 
+    PrintStackTrace();
     std::fflush(stderr);
     std::abort();
 }
@@ -42,9 +152,14 @@ template<typename ReturnType>
 #define ABORTING_OVERRIDE(returnType, name, parameters) \
     returnType name parameters noexcept override        \
     {                                                   \
-        return AbortUnimplemented<returnType>(#name);   \
+        return AbortUnimplemented<returnType>(          \
+            #name, __FUNCSIG__);                        \
     }
+// End of debugging helpers for the native shim.
 
+// ----------------------------------------------------------------------
+// IGCHeap interface implementation for the native shim.
+// ----------------------------------------------------------------------
 class RustGCHeap final : public IGCHeap
 {
 public:
@@ -143,7 +258,11 @@ public:
         GetLastGCGenerationSize,
         (int gen))
 
-    ABORTING_OVERRIDE(HRESULT, Initialize, ())
+    HRESULT Initialize() noexcept override
+    {
+        HRESULT hr = rust_gc_loader_probe();
+        return hr;
+    }
     ABORTING_OVERRIDE(bool, IsPromoted, (Object* object))
     ABORTING_OVERRIDE(
         bool,
@@ -276,14 +395,16 @@ public:
         IsInFrozenSegment,
         (Object* object))
 
-    ABORTING_OVERRIDE(
-        void,
-        ControlEvents,
-        (GCEventKeyword keyword, GCEventLevel level))
-    ABORTING_OVERRIDE(
-        void,
-        ControlPrivateEvents,
-        (GCEventKeyword keyword, GCEventLevel level))
+    void ControlEvents(GCEventKeyword keyword, GCEventLevel level) noexcept override
+    {
+        // The native shim does not support event tracing, so this method is a no-op.
+    }
+
+    void ControlPrivateEvents(GCEventKeyword keyword, GCEventLevel level) noexcept override
+    {
+        // The native shim does not support event tracing, so this method is a no-op.
+    }
+
     ABORTING_OVERRIDE(
         unsigned int,
         GetGenerationWithRange,
@@ -350,7 +471,11 @@ RustGCHeap GlobalRustGCHeap;
 class RustGCHandleManager final : public IGCHandleManager
 {
 public:
-    ABORTING_OVERRIDE(bool, Initialize, ());
+    bool Initialize() noexcept override
+    {
+        bool result = rust_gc_handle_manager_initialize();
+        return result;
+    }
     ABORTING_OVERRIDE(void, Shutdown, ());
     ABORTING_OVERRIDE(IGCHandleStore*, GetGlobalHandleStore, ());
     ABORTING_OVERRIDE(IGCHandleStore*, CreateHandleStore, ());
@@ -401,7 +526,7 @@ extern "C" __declspec(dllexport) HRESULT LOCALGC_CALLCONV GC_Initialize(
     *gcHandleManager = &GlobalRustGCHandleManager;
     // TODO: Implement GcDacVars support in the native shim.
 
-    const std::int32_t rustResult = gc_rust_loader_probe();
+    const std::int32_t rustResult = rust_gc_loader_probe();
     if (rustResult == 0)
     {
         WriteInitializationDiagnostic();

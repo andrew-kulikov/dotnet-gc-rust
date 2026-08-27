@@ -112,7 +112,7 @@ target_include_directories(dotnet_gc_shim PRIVATE
 
 # Record the native shim's dependency on the imported Rust DLL. This adds the
 # Rust import library to the MSVC link command.
-target_link_libraries(dotnet_gc_shim PRIVATE gc_ffi)
+target_link_libraries(dotnet_gc_shim PRIVATE gc_ffi dbghelp)
 
 # Configure the produced DLL and put all supported configurations in one clear
 # staging directory. Configuration-specific paths prevent Visual Studio's

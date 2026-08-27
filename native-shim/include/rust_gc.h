@@ -1,5 +1,11 @@
 #pragma once
 
-#include <cstdint>
+#include <Windows.h>
 
-extern "C" std::int32_t gc_rust_loader_probe() noexcept;
+// IGCHeap implementation
+extern "C" HRESULT rust_gc_loader_probe() noexcept;
+extern "C" HRESULT rust_gc_initialize() noexcept;
+
+// IGCHandleManager implementation
+extern "C" bool rust_gc_handle_manager_initialize() noexcept;
+
