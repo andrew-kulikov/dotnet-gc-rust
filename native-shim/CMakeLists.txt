@@ -91,6 +91,8 @@ target_compile_definitions(dotnet_gc_shim PRIVATE
     TARGET_AMD64
     TARGET_WINDOWS
     WIN32_LEAN_AND_MEAN
+    # Stack walking depends on DbgHelp and is intentionally debug-only.
+    $<$<CONFIG:Debug>:DOTNET_GC_RUST_ENABLE_STACK_TRACE>
 )
 
 # Enable strong MSVC warnings and require standards-conforming language behavior.
@@ -112,7 +114,10 @@ target_include_directories(dotnet_gc_shim PRIVATE
 
 # Record the native shim's dependency on the imported Rust DLL. This adds the
 # Rust import library to the MSVC link command.
-target_link_libraries(dotnet_gc_shim PRIVATE gc_ffi dbghelp)
+target_link_libraries(dotnet_gc_shim PRIVATE
+    gc_ffi
+    $<$<CONFIG:Debug>:dbghelp>
+)
 
 # Configure the produced DLL and put all supported configurations in one clear
 # staging directory. Configuration-specific paths prevent Visual Studio's

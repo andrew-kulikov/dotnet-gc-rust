@@ -16,6 +16,13 @@ import sys
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SUBMODULE_PATH = Path("external/dotnet-runtime")
 LOADER_DIAGNOSTIC = "dotnet-gc-rust: native shim reached Rust"
+INTERFACE_SHELL_DIAGNOSTIC = (
+    "dotnet-gc-rust: unimplemented method called: GetGlobalHandleStore"
+)
+SERVER_GC_DIAGNOSTIC = (
+    "dotnet-gc-rust: unsupported configuration: Server GC is enabled; "
+    "only workstation GC is supported"
+)
 LOADER_SMOKE_OUTPUT = "Hello, World!"
 MIRI_TOOLCHAIN = "nightly-2026-08-17"
 SYMBOL_CACHE = Path(r"D:\\temp\\symbol-cache")
@@ -390,6 +397,7 @@ def smoke(configuration: str, symbol_server: str | None) -> None:
         log(f"Using DbgHelp and SymSrv from {debugging_tools}")
 
     environment["DOTNET_GCPath"] = str(shim)
+    environment["DOTNET_GCServer"] = "0"
     environment["PATH"] = f"{shim.parent}{os.pathsep}{environment.get('PATH', '')}"
     result = run(
         [str(sample)],
@@ -405,9 +413,34 @@ def smoke(configuration: str, symbol_server: str | None) -> None:
         sys.stderr.flush()
 
     output = result.stdout + result.stderr
-    if result.returncode == 0 or LOADER_DIAGNOSTIC not in output:
-        raise RuntimeError("the loader did not reach the expected failing shim boundary")
-    log("Loader smoke test reached the expected deliberate initialization failure")
+    if (
+        result.returncode == 0
+        or LOADER_DIAGNOSTIC not in output
+        or INTERFACE_SHELL_DIAGNOSTIC not in output
+        or "GC initialization failed" in output
+    ):
+        raise RuntimeError("the loader did not reach the expected interface-shell boundary")
+    log("Loader smoke test reached IGCHandleManager::GetGlobalHandleStore")
+
+    server_environment = environment.copy()
+    server_environment["DOTNET_GCServer"] = "1"
+    server_result = run(
+        [str(sample)],
+        env=server_environment,
+        capture_output=True,
+        check=False,
+    )
+    if server_result.stdout:
+        sys.stdout.write(server_result.stdout)
+        sys.stdout.flush()
+    if server_result.stderr:
+        sys.stderr.write(server_result.stderr)
+        sys.stderr.flush()
+
+    server_output = server_result.stdout + server_result.stderr
+    if server_result.returncode == 0 or SERVER_GC_DIAGNOSTIC not in server_output:
+        raise RuntimeError("the shim did not reject Server GC as expected")
+    log("Loader smoke test rejected Server GC")
 
 
 def parse_arguments() -> argparse.Namespace:

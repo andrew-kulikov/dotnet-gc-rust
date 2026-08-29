@@ -3,7 +3,9 @@
 #include <type_traits>
 
 #include <Windows.h>
+#if defined(DOTNET_GC_RUST_ENABLE_STACK_TRACE)
 #include <DbgHelp.h>
+#endif
 
 #include "common.h"
 #include "gcenv.h"
@@ -20,6 +22,13 @@ namespace
 // Constants and helpers for the native shim.
 // ----------------------------------------------------------------------
 constexpr char ShimName[] = "dotnet-gc-rust";
+constexpr char ServerGCPrivateKey[] = "gcServer";
+constexpr char ServerGCPublicKey[] = "System.GC.Server";
+
+// CoreCLR owns this process-long interface object. The adapter retains the
+// pointer so future callbacks can stay in C++ without exposing the C++ layout
+// to Rust.
+IGCToCLR* GlobalGCToCLR = nullptr;
 
 void WriteInitializationDiagnostic() noexcept
 {
@@ -27,8 +36,18 @@ void WriteInitializationDiagnostic() noexcept
     std::fflush(stderr);
 }
 
+void WriteUnsupportedServerGCDiagnostic() noexcept
+{
+    std::fprintf(
+        stderr,
+        "dotnet-gc-rust: unsupported configuration: Server GC is enabled; "
+        "only workstation GC is supported\n");
+    std::fflush(stderr);
+}
+
+#if defined(DOTNET_GC_RUST_ENABLE_STACK_TRACE)
 // ------------------------------------------------------
-// Debugging helpers for the native shim. These are not used in production code.
+// Debugging helpers for the native shim.
 // ------------------------------------------------------
 void PrintStackTrace() noexcept
 {
@@ -132,6 +151,7 @@ void PrintStackTrace() noexcept
         }
     }
 }
+#endif
 
 template<typename ReturnType>
 [[noreturn]] ReturnType AbortUnimplemented(
@@ -144,7 +164,9 @@ template<typename ReturnType>
         method,
         signature);
 
+#if defined(DOTNET_GC_RUST_ENABLE_STACK_TRACE)
     PrintStackTrace();
+#endif
     std::fflush(stderr);
     std::abort();
 }
@@ -260,7 +282,7 @@ public:
 
     HRESULT Initialize() noexcept override
     {
-        HRESULT hr = rust_gc_loader_probe();
+        HRESULT hr = rust_gc_initialize();
         return hr;
     }
     ABORTING_OVERRIDE(bool, IsPromoted, (Object* object))
@@ -395,14 +417,17 @@ public:
         IsInFrozenSegment,
         (Object* object))
 
-    void ControlEvents(GCEventKeyword keyword, GCEventLevel level) noexcept override
+    void ControlEvents(GCEventKeyword, GCEventLevel) noexcept override
     {
-        // The native shim does not support event tracing, so this method is a no-op.
+        // CoreCLR calls this during FinalizeLoad, before IGCHeap::Initialize.
+        // The interface shell intentionally supports event-control notifications
+        // as no-ops; it does not produce an event stream.
     }
 
-    void ControlPrivateEvents(GCEventKeyword keyword, GCEventLevel level) noexcept override
+    void ControlPrivateEvents(GCEventKeyword, GCEventLevel) noexcept override
     {
-        // The native shim does not support event tracing, so this method is a no-op.
+        // See ControlEvents: accepting this startup notification is part of the
+        // shell contract rather than a silent-success unsupported stub.
     }
 
     ABORTING_OVERRIDE(
@@ -517,11 +542,44 @@ extern "C" __declspec(dllexport) void LOCALGC_CALLCONV GC_VersionInfo(VersionInf
 }
 
 extern "C" __declspec(dllexport) HRESULT LOCALGC_CALLCONV GC_Initialize(
-    IGCToCLR*,
+    IGCToCLR* gcToClr,
     IGCHeap** gcHeap,
     IGCHandleManager** gcHandleManager,
     GcDacVars* gcDacVars) noexcept
 {
+    if (gcHeap != nullptr)
+    {
+        *gcHeap = nullptr;
+    }
+    if (gcHandleManager != nullptr)
+    {
+        *gcHandleManager = nullptr;
+    }
+    if (gcDacVars != nullptr)
+    {
+        *gcDacVars = {};
+    }
+
+    GlobalGCToCLR = gcToClr;
+    if ((GlobalGCToCLR == nullptr) ||
+        (gcHeap == nullptr) ||
+        (gcHandleManager == nullptr) ||
+        (gcDacVars == nullptr))
+    {
+        return E_POINTER;
+    }
+
+    bool serverGC = false;
+    if (GlobalGCToCLR->GetBooleanConfigValue(
+            ServerGCPrivateKey,
+            ServerGCPublicKey,
+            &serverGC) &&
+        serverGC)
+    {
+        WriteUnsupportedServerGCDiagnostic();
+        return E_NOTIMPL;
+    }
+
     *gcHeap = &GlobalRustGCHeap;
     *gcHandleManager = &GlobalRustGCHandleManager;
     // TODO: Implement GcDacVars support in the native shim.
