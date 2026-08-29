@@ -65,7 +65,7 @@ Build the Rust FFI library and C++ shim together:
 python scripts/build.py build
 ```
 
-The Python entry point locates Visual Studio, invokes Cargo and CMake with the x64 Visual Studio generator, and verifies the standalone-GC exports. Build products are staged under `out/build/native-shim/debug/stage`. Run the loader-boundary smoke test, which currently expects the shim to fail initialization deliberately, with:
+The Python entry point locates Visual Studio, invokes Cargo and CMake with the x64 Visual Studio generator, and verifies the standalone-GC exports. Build products are staged under `out/build/native-shim/debug/stage`. Run the interface-shell smoke test, which expects initialization to succeed and then stop at the first named unsupported operation, with:
 
 ```console
 python scripts/build.py smoke

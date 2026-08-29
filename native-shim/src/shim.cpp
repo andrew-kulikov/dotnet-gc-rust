@@ -12,7 +12,11 @@
 
 #include "rust_gc.h"
 
-static_assert(sizeof(void*) == 8, "The native shim requires a 64-bit process");
+#if !defined(_WIN32) || !defined(_M_X64)
+#error "dotnet-gc-rust supports only Windows x64"
+#endif
+
+static_assert(sizeof(void*) == 8, "The native shim requires a Windows x64 process");
 static_assert(GC_INTERFACE_MAJOR_VERSION == 5, "Unexpected CoreCLR GC interface major version");
 static_assert(GC_INTERFACE_MINOR_VERSION == 5, "Unexpected CoreCLR GC interface minor version");
 

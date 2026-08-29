@@ -2,6 +2,16 @@
 # selection support.
 cmake_minimum_required(VERSION 3.25)
 
+# Reject an unsupported Visual Studio platform before project() asks MSBuild to
+# initialize that toolchain. This keeps the failure deterministic even when the
+# corresponding ARM64 or x86 build tools are not installed.
+if(NOT CMAKE_GENERATOR_PLATFORM STREQUAL "x64")
+    message(FATAL_ERROR
+        "The native shim currently supports Windows x64 only; selected platform: "
+        "'${CMAKE_GENERATOR_PLATFORM}'"
+    )
+endif()
+
 # Create a C++-only project. Cargo builds the Rust crate separately before CMake
 # is configured.
 project(dotnet_gc_shim LANGUAGES CXX)
@@ -11,10 +21,13 @@ if(NOT WIN32)
     message(FATAL_ERROR "The native shim currently supports Windows only")
 endif()
 
-# CMAKE_SIZEOF_VOID_P describes the selected target architecture. CoreCLR and
-# this first shim milestone are deliberately restricted to 64-bit processes.
+# The pinned C++ ABI and build definitions below are specific to MSVC x64.
+# A pointer-size check alone would incorrectly accept Windows ARM64.
+if(NOT MSVC)
+    message(FATAL_ERROR "The native shim currently supports the MSVC toolchain only")
+endif()
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
-    message(FATAL_ERROR "The native shim currently supports x64 only")
+    message(FATAL_ERROR "The native shim requires a 64-bit x64 target")
 endif()
 
 # Expose the runtime checkout as an overridable CMake cache path. By default it
