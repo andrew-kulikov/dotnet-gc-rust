@@ -492,7 +492,28 @@ static_assert(
     "RustGCHeap must implement every IGCHeap method");
 
 RustGCHeap GlobalRustGCHeap;
-// End of IGCHeap interface 
+// IGCHeap 
+
+// ----------------------------------------------------------------------
+// IGCHandleStore interface implementation for the native shim.
+// ----------------------------------------------------------------------
+class RustGCHandleStore final : public IGCHandleStore
+{
+public:
+    ABORTING_OVERRIDE(void, Uproot, ());
+    ABORTING_OVERRIDE(bool, ContainsHandle, (OBJECTHANDLE handle));
+    ABORTING_OVERRIDE(OBJECTHANDLE, CreateHandleOfType, (Object* object, HandleType type));
+    ABORTING_OVERRIDE(OBJECTHANDLE, CreateHandleOfType, (Object* object, HandleType type, int heapToAffinitizeTo));
+    ABORTING_OVERRIDE(OBJECTHANDLE, CreateHandleWithExtraInfo, (Object* object, HandleType type, void* pExtraInfo));
+    ABORTING_OVERRIDE(OBJECTHANDLE, CreateDependentHandle, (Object* primary, Object* secondary));
+};
+
+static_assert(
+    !std::is_abstract_v<RustGCHandleStore>,
+    "RustGCHandleStore must implement every IGCHandleStore method");
+
+RustGCHandleStore GlobalRustGCHandleStore;
+// IGCHandleStore
 
 // ----------------------------------------------------------------------
 // IGCHandleManager interface implementation for the native shim.
@@ -506,7 +527,10 @@ public:
         return result;
     }
     ABORTING_OVERRIDE(void, Shutdown, ());
-    ABORTING_OVERRIDE(IGCHandleStore*, GetGlobalHandleStore, ());
+    IGCHandleStore* GetGlobalHandleStore() noexcept override
+    {
+        return &GlobalRustGCHandleStore;
+    }
     ABORTING_OVERRIDE(IGCHandleStore*, CreateHandleStore, ());
     ABORTING_OVERRIDE(void, DestroyHandleStore, (IGCHandleStore* store));
     ABORTING_OVERRIDE(OBJECTHANDLE, CreateGlobalHandleOfType, (Object* object, HandleType type));
@@ -529,7 +553,7 @@ static_assert(
     "RustGCHandleManager must implement every IGCHandleManager method");
 
 RustGCHandleManager GlobalRustGCHandleManager;
-// End of IGCHandleManager interface implementation for the native shim.
+// IGCHandleManager
 } // namespace
 
 extern "C" __declspec(dllexport) void LOCALGC_CALLCONV GC_VersionInfo(VersionInfo* versionInfo) noexcept
