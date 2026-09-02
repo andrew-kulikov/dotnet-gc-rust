@@ -32,7 +32,7 @@ Do not add GC code while doing this mission.
 - [x] Build and run `samples/LoaderSmoke` with the stock GC and record its stable
   success output.
 - [x] Provide repository commands for formatting, Clippy, Rust tests, Miri on
-  `gc-core`, and the managed build. Run the repeatable subset in Windows CI.
+  `gc-rust`, and the managed build. Run the repeatable subset in Windows CI.
 - [x] Document only the local prerequisites and verification commands needed to
   build the project.
 - [x] Ignore Cargo, CMake, MSBuild, managed, dump, and trace outputs so the

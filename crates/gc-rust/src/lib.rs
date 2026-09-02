@@ -1,5 +1,9 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
+pub mod core;
+pub mod platform;
+pub mod runtime;
+
 type HResult = u32;
 
 const S_OK: HResult = 0;

@@ -51,10 +51,10 @@ Record that method and the call sequence; they are input to mission 03.
 
 ## Recorded interface inventory and trace
 
-All pure virtual methods of `IGCHeap` and `IGCHandleManager` must have exact C++
-overrides before those two objects can be constructed. The compiler verifies
-that requirement, and `static_assert` verifies that both adapter classes are
-concrete. Mission 02 does not construct an `IGCHandleStore`.
+All pure virtual methods of `IGCHeap`, `IGCHandleManager`, and `IGCHandleStore`
+must have exact C++ overrides before those objects can be constructed. The
+compiler verifies that requirement, and `static_assert` verifies that all three
+adapter classes are concrete.
 
 Observed with the pinned runtime:
 
@@ -63,8 +63,10 @@ Observed with the pinned runtime:
 2. `IGCHeap::ControlEvents` and `IGCHeap::ControlPrivateEvents` are accepted as
    intentional no-ops while CoreCLR publishes the heap.
 3. `IGCHandleManager::Initialize` succeeds through the Rust C ABI.
-4. `IGCHandleManager::GetGlobalHandleStore` reaches the shared unsupported-call
-   diagnostic and terminates. This is the first Mission 03 operation.
+4. `IGCHandleManager::GetGlobalHandleStore` returns the stable global store.
+5. `IGCHandleManager::CreateGlobalHandleOfType` reaches the shared
+   unsupported-call diagnostic and terminates. This is the first Mission 03
+   operation.
 
 Not yet observed from `IGCHeap`:
 
@@ -99,7 +101,7 @@ Not yet observed from `IGCHeap`:
 
 Not yet observed from `IGCHandleManager`:
 
-`CreateDuplicateHandle`, `CreateGlobalHandleOfType`, `CreateHandleStore`,
+`CreateDuplicateHandle`, `CreateHandleStore`,
 `DestroyHandleOfType`, `DestroyHandleOfUnknownType`, `DestroyHandleStore`,
 `GetDependentHandleSecondary`, `GetExtraInfoFromHandle`, `HandleFetchType`,
 `InterlockedCompareExchangeObjectInHandle`, `SetDependentHandleSecondary`,

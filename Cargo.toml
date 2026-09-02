@@ -1,9 +1,6 @@
 [workspace]
 members = [
-  "crates/gc-core",
-  "crates/gc-platform",
-  "crates/gc-runtime",
-  "crates/gc-ffi",
+  "crates/gc-rust",
 ]
 resolver = "2"
 

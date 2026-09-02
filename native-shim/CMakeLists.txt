@@ -39,13 +39,13 @@ set(
     "Path to the pinned dotnet/runtime source tree"
 )
 
-# Tell CMake where Cargo placed gc_ffi.dll and its MSVC import library. The
+# Tell CMake where Cargo placed gc_rust.dll and its MSVC import library. The
 # Python build script changes this path for Debug versus Release builds.
 set(
     RUST_OUTPUT_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../target/debug"
     CACHE PATH
-    "Directory containing the gc-ffi Cargo build outputs"
+    "Directory containing the gc-rust Cargo build outputs"
 )
 
 # Validate the runtime dependency early so a missing submodule produces an
@@ -58,23 +58,23 @@ if(NOT EXISTS "${GC_INTERFACE_HEADER}")
 endif()
 
 # A Windows DLL is linked through its .dll.lib import library and loaded from
-# its .dll at runtime. Cargo produces both files for the gc-ffi cdylib.
-set(RUST_DLL "${RUST_OUTPUT_DIR}/gc_ffi.dll")
-set(RUST_IMPORT_LIBRARY "${RUST_OUTPUT_DIR}/gc_ffi.dll.lib")
+# its .dll at runtime. Cargo produces both files for the gc-rust cdylib.
+set(RUST_DLL "${RUST_OUTPUT_DIR}/gc_rust.dll")
+set(RUST_IMPORT_LIBRARY "${RUST_OUTPUT_DIR}/gc_rust.dll.lib")
 
 # CMake does not invoke Cargo itself, so fail clearly if the Python script (or a
 # manual Cargo build) has not produced the Rust library first.
 if(NOT EXISTS "${RUST_IMPORT_LIBRARY}")
     message(FATAL_ERROR
-        "The gc-ffi import library is missing. Run: cargo build -p gc-ffi"
+        "The gc-rust import library is missing. Run: cargo build -p gc-rust"
     )
 endif()
 
 # Model Cargo's already-built DLL as an imported CMake target. IMPORTED means
 # CMake links and copies the library but does not compile it; GLOBAL makes the
 # target visible throughout this CMake project.
-add_library(gc_ffi SHARED IMPORTED GLOBAL)
-set_target_properties(gc_ffi PROPERTIES
+add_library(gc_rust SHARED IMPORTED GLOBAL)
+set_target_properties(gc_rust PROPERTIES
     # MSVC uses this import library while linking dotnet_gc_shim.dll.
     IMPORTED_IMPLIB "${RUST_IMPORT_LIBRARY}"
     # This is the runtime DLL that must be available when CoreCLR loads the shim.
@@ -128,7 +128,7 @@ target_include_directories(dotnet_gc_shim PRIVATE
 # Record the native shim's dependency on the imported Rust DLL. This adds the
 # Rust import library to the MSVC link command.
 target_link_libraries(dotnet_gc_shim PRIVATE
-    gc_ffi
+    gc_rust
     $<$<CONFIG:Debug>:dbghelp>
 )
 
@@ -146,7 +146,7 @@ set_target_properties(dotnet_gc_shim PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/stage"
 )
 
-# After linking the shim, place gc_ffi.dll beside it. Windows must be able to
+# After linking the shim, place gc_rust.dll beside it. Windows must be able to
 # resolve this dependent DLL when CoreCLR loads dotnet_gc_shim.dll.
 add_custom_command(TARGET dotnet_gc_shim POST_BUILD
     # Use CMake's portable file helper and avoid rewriting an identical DLL.

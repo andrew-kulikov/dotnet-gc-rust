@@ -1,5 +1,5 @@
 [package]
-name = "gc-platform"
+name = "gc-rust"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -8,3 +8,6 @@ repository.workspace = true
 
 [lints]
 workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]

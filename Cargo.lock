@@ -3,24 +3,5 @@
 version = 4
 
 [[package]]
-name = "gc-core"
+name = "gc-rust"
 version = "0.1.0"
-
-[[package]]
-name = "gc-ffi"
-version = "0.1.0"
-dependencies = [
- "gc-runtime",
-]
-
-[[package]]
-name = "gc-platform"
-version = "0.1.0"
-
-[[package]]
-name = "gc-runtime"
-version = "0.1.0"
-dependencies = [
- "gc-core",
- "gc-platform",
-]

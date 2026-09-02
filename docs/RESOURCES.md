@@ -77,7 +77,7 @@ Important caution: Satori changes more than a replaceable GC library. Its design
 - [The Rustonomicon](https://doc.rust-lang.org/nomicon/) — unsafe contracts, uninitialized memory, aliasing, `Send`/`Sync`, and FFI.
 - [Unsafe Code Guidelines reference](https://rust-lang.github.io/unsafe-code-guidelines/) — especially layout, aliasing vocabulary, and pointer provenance.
 - [Strict provenance RFC 3559](https://rust-lang.github.io/rfcs/3559-rust-has-provenance.html) — why an address is not the whole meaning of a Rust pointer.
-- [Miri](https://github.com/rust-lang/miri) — use on `gc-core`; it cannot validate most platform FFI.
+- [Miri](https://github.com/rust-lang/miri) — use on runtime-independent `gc-rust` code paths; it cannot validate most platform FFI.
 - [Loom](https://github.com/tokio-rs/loom) — explore interleavings in custom atomic queues/freelists.
 - [The Rust Fuzz Book](https://rust-fuzz.github.io/book/) — fuzz metadata decoders and heap walkers.
 - [Rust as a Language for High Performance GC Implementation](https://www.mmtk.io/assets/pubs/rust-ismm-2016.pdf) — a directly relevant discussion of using Rust for collector implementation.

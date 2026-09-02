@@ -34,14 +34,11 @@ See [ROADMAP.md](ROADMAP.md) for the high-level project direction, [tasks/README
 - A fully concurrent or moving collector.
 - Reproducing Satori. Satori is a mature runtime fork with custom barrier and runtime integration; this project borrows bounded-work and regional ideas at a much smaller scale.
 
-## Proposed repository layout
+## Repository layout
 
 ```text
 crates/
-  gc-core/          Runtime-independent heap, tracer, policies, and model tests
-  gc-platform/      Virtual-memory and timing abstraction; Windows implementation
-  gc-runtime/       CoreCLR object layout, GCDesc decoding, roots, and handles
-  gc-ffi/           Stable C ABI exposed by the Rust library
+  gc-rust/          Collector core, platform/runtime integration, and stable C ABI
 native-shim/        Thin C++ implementation of the versioned CoreCLR GC interfaces
 samples/            Small C# programs for smoke tests, GC features, and workloads
 benchmarks/         Reproducible workloads, runners, and result schemas
@@ -109,10 +106,10 @@ rustup toolchain install nightly-2026-08-17 --profile minimal --component miri
 cargo +nightly-2026-08-17 miri setup
 ```
 
-Run Miri only on the runtime-independent crate:
+Run Miri on the unified Rust crate:
 
 ```powershell
-cargo +nightly-2026-08-17 miri test -p gc-core
+cargo +nightly-2026-08-17 miri test -p gc-rust
 ```
 
 ## .NET toolchain
@@ -174,21 +171,21 @@ Hello, World!
 
 ### Miri demonstration
 
-`gc-core` contains an ignored teaching test with a deliberate use-after-free. An ordinary test run compiles it but does not execute it:
+`gc-rust` contains an ignored teaching test with a deliberate use-after-free. An ordinary test run compiles it but does not execute it:
 
 ```powershell
-cargo test -p gc-core
+cargo test -p gc-rust
 ```
 
 Run just that test through Miri to see the interpreter reject behavior that the compiler accepts:
 
 ```powershell
-cargo +nightly-2026-08-17 miri test -p gc-core --test miri_undefined_behavior -- --ignored --exact miri_detects_use_after_free
+cargo +nightly-2026-08-17 miri test -p gc-rust --test miri_undefined_behavior -- --ignored --exact miri_detects_use_after_free
 ```
 
 This command is expected to fail with `memory access failed: ... has been freed, so this pointer is dangling` because the test reads through a pointer after freeing its allocation. The test first checks `cfg!(miri)`, so accidentally forcing ignored tests through the native runner produces a normal panic before reaching the undefined operation.
 
-Do not expect `gc-platform`, `gc-runtime`, `gc-ffi`, or the C++ shim to run under Miri once they use Windows APIs, CoreCLR callbacks, or native FFI. Test those layers with their normal integration and native-safety tooling instead.
+Once the platform and runtime modules use Windows APIs, CoreCLR callbacks, or native FFI, keep Miri tests focused on runtime-independent code paths. Test native integration and the C++ shim with their normal integration and native-safety tooling instead.
 
 ## Public-repository rules
 

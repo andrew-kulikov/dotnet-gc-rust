@@ -17,7 +17,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SUBMODULE_PATH = Path("external/dotnet-runtime")
 LOADER_DIAGNOSTIC = "dotnet-gc-rust: native shim reached Rust"
 INTERFACE_SHELL_DIAGNOSTIC = (
-    "dotnet-gc-rust: unimplemented method called: GetGlobalHandleStore"
+    "dotnet-gc-rust: unimplemented method called: CreateGlobalHandleOfType"
 )
 SERVER_GC_DIAGNOSTIC = (
     "dotnet-gc-rust: unsupported configuration: Server GC is enabled; "
@@ -258,7 +258,7 @@ def build(configuration: str) -> Path:
     cargo_target = REPOSITORY_ROOT / "target"
     environment["CARGO_TARGET_DIR"] = str(cargo_target)
 
-    cargo_command = ["cargo", "build", "--locked", "-p", "gc-ffi"]
+    cargo_command = ["cargo", "build", "--locked", "-p", "gc-rust"]
     if configuration == "release":
         cargo_command.append("--release")
     run(cargo_command, env=environment)
@@ -357,7 +357,7 @@ def verify() -> None:
 
 
 def miri() -> None:
-    """Run the FFI-free gc-core tests under the pinned nightly Miri interpreter."""
+    """Run the gc-rust tests under the pinned nightly Miri interpreter."""
     run(["cargo", f"+{MIRI_TOOLCHAIN}", "miri", "setup"])
     run(
         [
@@ -367,7 +367,7 @@ def miri() -> None:
             "test",
             "--locked",
             "-p",
-            "gc-core",
+            "gc-rust",
         ]
     )
 
@@ -421,7 +421,7 @@ def smoke(configuration: str, symbol_server: str | None) -> None:
         or "GC initialization failed" in output
     ):
         raise RuntimeError("the loader did not reach the expected interface-shell boundary")
-    log("Loader smoke test reached IGCHandleManager::GetGlobalHandleStore")
+    log("Loader smoke test reached IGCHandleManager::CreateGlobalHandleOfType")
 
     server_environment = environment.copy()
     server_environment["DOTNET_GCServer"] = "1"
@@ -451,7 +451,7 @@ def parse_arguments() -> argparse.Namespace:
     subparsers.add_parser(
         "verify", help="run formatting, lint, Rust tests, and the stock-GC sample"
     )
-    subparsers.add_parser("miri", help="run gc-core tests under the pinned Miri")
+    subparsers.add_parser("miri", help="run gc-rust tests under the pinned Miri")
 
     for command in ("build", "smoke"):
         command_parser = subparsers.add_parser(command)

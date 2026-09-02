@@ -27,7 +27,7 @@ flowchart LR
     Harness["Pure-Rust model and property tests"] --> Core
 ```
 
-### `gc-core`
+### `gc-rust::core`
 
 Runtime-independent mechanisms:
 
@@ -41,7 +41,7 @@ Runtime-independent mechanisms:
 
 The first version should use a byte-backed simulated heap, not native addresses. This allows Miri, property tests, deterministic fault injection, and a simple reference implementation.
 
-### `gc-platform`
+### `gc-rust::platform`
 
 An intentionally small abstraction:
 
@@ -55,7 +55,7 @@ trait VirtualMemory {
 
 The initial implementation uses Windows reserve/commit semantics. `Reservation` owns the range and releases it on drop. Collector code should not call Windows APIs directly.
 
-### `gc-runtime`
+### `gc-rust::runtime`
 
 CoreCLR-specific knowledge:
 
@@ -67,9 +67,10 @@ CoreCLR-specific knowledge:
 - Handle storage and semantics.
 - Frozen segments, finalization, and sync-block weak scanning.
 
-This crate may depend on `gc-core`, but `gc-core` must not depend on it.
+The runtime module may depend on the core module, but the core module must not
+depend on runtime integration details.
 
-### `gc-ffi` and `native-shim`
+### `gc-rust` C ABI and `native-shim`
 
 The ownership and unwind rules for this boundary are an accepted invariant,
 recorded in [Loader-boundary decision](LOADER_BOUNDARY.md).
@@ -217,7 +218,7 @@ A contained future experiment can model:
 - A local collection keeps escaped objects and roots from the owning thread.
 - Too many escaped bytes promote the region to global handling.
 
-This belongs first in `gc-core`. Integrating it with CoreCLR requires a separate runtime-fork decision and is not part of the 2026 completion criteria.
+This belongs first in the `gc-rust::core` module. Integrating it with CoreCLR requires a separate runtime-fork decision and is not part of the 2026 completion criteria.
 
 ## Unsafe-code policy
 
