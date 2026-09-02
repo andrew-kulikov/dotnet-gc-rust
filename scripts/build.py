@@ -26,6 +26,7 @@ SERVER_GC_DIAGNOSTIC = (
 LOADER_SMOKE_OUTPUT = "Hello, World!"
 MIRI_TOOLCHAIN = "nightly-2026-08-17"
 SYMBOL_CACHE = Path(r"D:\\temp\\symbol-cache")
+MICROSOFT_SYMBOL_SERVER = "https://msdl.microsoft.com/download/symbols"
 
 
 def log(message: str, is_error: bool = False) -> None:
@@ -464,6 +465,7 @@ def parse_arguments() -> argparse.Namespace:
             command_parser.add_argument(
                 "--symbol-server",
                 metavar="ADDRESS",
+                default=MICROSOFT_SYMBOL_SERVER,
                 help=(
                     "symbol server address used by DbgHelp; downloaded symbols "
                     f"are cached under {SYMBOL_CACHE}"
