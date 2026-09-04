@@ -431,15 +431,14 @@ def smoke(configuration: str, symbol_server: str | None) -> None:
         capture_output=True,
         check=False,
     )
-    if server_result.stdout:
-        sys.stdout.write(server_result.stdout)
-        sys.stdout.flush()
-    if server_result.stderr:
-        sys.stderr.write(server_result.stderr)
-        sys.stderr.flush()
-
     server_output = server_result.stdout + server_result.stderr
     if server_result.returncode == 0 or SERVER_GC_DIAGNOSTIC not in server_output:
+        if server_result.stdout:
+            sys.stdout.write(server_result.stdout)
+            sys.stdout.flush()
+        if server_result.stderr:
+            sys.stderr.write(server_result.stderr)
+            sys.stderr.flush()
         raise RuntimeError("the shim did not reject Server GC as expected")
     log("Loader smoke test rejected Server GC")
 
