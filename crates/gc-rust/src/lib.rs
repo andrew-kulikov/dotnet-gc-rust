@@ -1,5 +1,6 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
+pub mod alloc;
 pub mod core;
 mod gc_heap;
 mod handle_manager;

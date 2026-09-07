@@ -17,6 +17,16 @@
 #endif
 
 static_assert(sizeof(void*) == 8, "The native shim requires a Windows x64 process");
+// Keep in sync with Rust's GcAllocContext in allocation.rs.
+static_assert(sizeof(gc_alloc_context) == 56);
+static_assert(alignof(gc_alloc_context) == 8);
+static_assert(offsetof(gc_alloc_context, alloc_ptr) == 0);
+static_assert(offsetof(gc_alloc_context, alloc_limit) == 8);
+static_assert(offsetof(gc_alloc_context, alloc_bytes) == 16);
+static_assert(offsetof(gc_alloc_context, alloc_bytes_uoh) == 24);
+static_assert(offsetof(gc_alloc_context, gc_reserved_1) == 32);
+static_assert(offsetof(gc_alloc_context, gc_reserved_2) == 40);
+static_assert(offsetof(gc_alloc_context, alloc_count) == 48);
 static_assert(GC_INTERFACE_MAJOR_VERSION == 5, "Unexpected CoreCLR GC interface major version");
 static_assert(GC_INTERFACE_MINOR_VERSION == 5, "Unexpected CoreCLR GC interface minor version");
 
@@ -335,11 +345,14 @@ public:
         GetLastGCDuration,
         (int generation))
     ABORTING_OVERRIDE(size_t, GetNow, ())
-
-    ABORTING_OVERRIDE(
-        Object*,
-        Alloc,
-        (gc_alloc_context* acontext, size_t size, uint32_t flags))
+    
+    Object* Alloc(
+        gc_alloc_context* acontext,
+        size_t size,
+        uint32_t flags) override
+    {
+        return static_cast<Object*>(rust_gc_alloc(acontext, size, flags));
+    }
     ABORTING_OVERRIDE(void, PublishObject, (uint8_t* obj))
     ABORTING_OVERRIDE(void, SetWaitForGCEvent, ())
     ABORTING_OVERRIDE(void, ResetWaitForGCEvent, ())
