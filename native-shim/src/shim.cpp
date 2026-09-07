@@ -502,7 +502,17 @@ class RustGCHandleStore final : public IGCHandleStore
 public:
     ABORTING_OVERRIDE(void, Uproot, ());
     ABORTING_OVERRIDE(bool, ContainsHandle, (OBJECTHANDLE handle));
-    ABORTING_OVERRIDE(OBJECTHANDLE, CreateHandleOfType, (Object* object, HandleType type));
+    OBJECTHANDLE CreateHandleOfType(Object* object, HandleType type) noexcept override
+    {
+        RustGCObjectHandle handle = rust_gc_handle_store_create_handle_of_type(
+            static_cast<RustGCObject>(object),
+            static_cast<std::uint32_t>(type));
+
+        // RustGCObjectHandle is the address of an Object* slot, while
+        // OBJECTHANDLE is CoreCLR's opaque pointer type for that same address.
+        return reinterpret_cast<OBJECTHANDLE>(handle);
+    }
+
     ABORTING_OVERRIDE(OBJECTHANDLE, CreateHandleOfType, (Object* object, HandleType type, int heapToAffinitizeTo));
     ABORTING_OVERRIDE(OBJECTHANDLE, CreateHandleWithExtraInfo, (Object* object, HandleType type, void* pExtraInfo));
     ABORTING_OVERRIDE(OBJECTHANDLE, CreateDependentHandle, (Object* primary, Object* secondary));
@@ -533,7 +543,10 @@ public:
     }
     ABORTING_OVERRIDE(IGCHandleStore*, CreateHandleStore, ());
     ABORTING_OVERRIDE(void, DestroyHandleStore, (IGCHandleStore* store));
-    ABORTING_OVERRIDE(OBJECTHANDLE, CreateGlobalHandleOfType, (Object* object, HandleType type));
+    OBJECTHANDLE CreateGlobalHandleOfType(Object* object, HandleType type) noexcept override
+    {
+        return GlobalRustGCHandleStore.CreateHandleOfType(object, type);
+    }
     ABORTING_OVERRIDE(OBJECTHANDLE, CreateDuplicateHandle, (OBJECTHANDLE handle));
     ABORTING_OVERRIDE(void, DestroyHandleOfType, (OBJECTHANDLE handle, HandleType type));
     ABORTING_OVERRIDE(void, DestroyHandleOfUnknownType, (OBJECTHANDLE handle));
