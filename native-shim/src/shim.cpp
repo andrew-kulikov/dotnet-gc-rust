@@ -27,6 +27,16 @@ static_assert(offsetof(gc_alloc_context, alloc_bytes_uoh) == 24);
 static_assert(offsetof(gc_alloc_context, gc_reserved_1) == 32);
 static_assert(offsetof(gc_alloc_context, gc_reserved_2) == 40);
 static_assert(offsetof(gc_alloc_context, alloc_count) == 48);
+// Keep these pinned Windows x64 ABI checks in sync with FrozenSegmentInfo in
+// segment.rs. The descriptor crosses the C ABI directly.
+static_assert(std::is_standard_layout_v<segment_info>);
+static_assert(sizeof(segment_info) == 40);
+static_assert(alignof(segment_info) == 8);
+static_assert(offsetof(segment_info, pvMem) == 0);
+static_assert(offsetof(segment_info, ibFirstObject) == 8);
+static_assert(offsetof(segment_info, ibAllocated) == 16);
+static_assert(offsetof(segment_info, ibCommit) == 24);
+static_assert(offsetof(segment_info, ibReserved) == 32);
 static_assert(GC_INTERFACE_MAJOR_VERSION == 5, "Unexpected CoreCLR GC interface major version");
 static_assert(GC_INTERFACE_MINOR_VERSION == 5, "Unexpected CoreCLR GC interface minor version");
 
@@ -345,7 +355,7 @@ public:
         GetLastGCDuration,
         (int generation))
     ABORTING_OVERRIDE(size_t, GetNow, ())
-    
+
     Object* Alloc(
         gc_alloc_context* acontext,
         size_t size,
@@ -353,7 +363,11 @@ public:
     {
         return static_cast<Object*>(rust_gc_alloc(acontext, size, flags));
     }
-    ABORTING_OVERRIDE(void, PublishObject, (uint8_t* obj))
+    void PublishObject(uint8_t* obj) override
+    {
+        // ZeroGC: object storage remains allocated forever and no concurrent
+        // collector walks it, so publication currently has no state to update.
+    }
     ABORTING_OVERRIDE(void, SetWaitForGCEvent, ())
     ABORTING_OVERRIDE(void, ResetWaitForGCEvent, ())
 
@@ -421,10 +435,12 @@ public:
         StressHeap,
         (gc_alloc_context* acontext))
 
-    ABORTING_OVERRIDE(
-        segment_handle,
-        RegisterFrozenSegment,
-        (segment_info* pseginfo))
+    segment_handle RegisterFrozenSegment(segment_info* pseginfo) noexcept override
+    {
+        // Rust must not retain pseginfo: CoreCLR owns the descriptor and only
+        // guarantees that it is valid for this call.
+        return reinterpret_cast<segment_handle>(rust_gc_register_frozen_segment(pseginfo));
+    }
     ABORTING_OVERRIDE(
         void,
         UnregisterFrozenSegment,
@@ -463,13 +479,13 @@ public:
         (
             void* context,
             ConfigurationValueFunc configurationValueFunc))
-    ABORTING_OVERRIDE(
-        void,
-        UpdateFrozenSegment,
-        (
-            segment_handle seg,
-            uint8_t* allocated,
-            uint8_t* committed))
+    void UpdateFrozenSegment(segment_handle seg, uint8_t* allocated, uint8_t* committed) noexcept override
+    {
+        rust_gc_update_frozen_segment(
+            reinterpret_cast<RustGCFrozenSegmentHandle>(seg),
+            allocated,
+            committed);
+    }
     ABORTING_OVERRIDE(int, RefreshMemoryLimit, ())
     ABORTING_OVERRIDE(
         enable_no_gc_region_callback_status,

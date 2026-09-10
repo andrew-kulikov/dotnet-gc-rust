@@ -21,7 +21,7 @@ pub extern "C" fn rust_gc_handle_store_create_handle_of_type(
     object: Object,
     handle_type: u32,
 ) -> ObjectHandle {
-    println!("Creating handle for object: {object:?} with type: {handle_type}");
+    println!("rust_gc_handle_store_create_handle_of_type: {object:?} with type: {handle_type}");
 
     let layout = Layout::new::<HandleRecord>();
 

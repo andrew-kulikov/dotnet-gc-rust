@@ -8,3 +8,4 @@ mod handle_store;
 pub mod object;
 pub mod platform;
 pub mod runtime;
+mod segment;
