@@ -10,11 +10,25 @@ using RustGCFrozenSegmentHandle = void*;
 
 struct gc_alloc_context;
 struct segment_info;
+struct WriteBarrierParameters;
 
+extern "C"
+{
+    typedef HRESULT RustGCStompWriteBarrierFunction(
+        void* context,
+        WriteBarrierParameters* parameters) noexcept;
+}
+using RustGCStompWriteBarrier = RustGCStompWriteBarrierFunction*;
+
+struct RustGCToCLR
+{
+    void* context;
+    RustGCStompWriteBarrier stomp_write_barrier;
+};
 
 // IGCHeap implementation
 extern "C" HRESULT rust_gc_loader_probe() noexcept;
-extern "C" HRESULT rust_gc_initialize() noexcept;
+extern "C" HRESULT rust_gc_initialize(const RustGCToCLR* gc_to_clr) noexcept;
 extern "C" RustGCObject rust_gc_alloc(
     gc_alloc_context* acontext,
     std::size_t size,

@@ -17,7 +17,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SUBMODULE_PATH = Path("external/dotnet-runtime")
 LOADER_DIAGNOSTIC = "dotnet-gc-rust: native shim reached Rust"
 INTERFACE_SHELL_DIAGNOSTIC = (
-    "dotnet-gc-rust: unimplemented method called: CreateGlobalHandleOfType"
+    "dotnet-gc-rust: unimplemented method called: SetFinalizationRun"
 )
 SERVER_GC_DIAGNOSTIC = (
     "dotnet-gc-rust: unsupported configuration: Server GC is enabled; "
@@ -421,7 +421,7 @@ def smoke(configuration: str, symbol_server: str | None) -> None:
         or "GC initialization failed" in output
     ):
         raise RuntimeError("the loader did not reach the expected interface-shell boundary")
-    log("Loader smoke test reached IGCHandleManager::CreateGlobalHandleOfType")
+    log("Loader smoke test reached IGCHeap::SetFinalizationRun")
 
     server_environment = environment.copy()
     server_environment["DOTNET_GCServer"] = "1"

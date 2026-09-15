@@ -104,7 +104,6 @@ pub unsafe extern "C" fn rust_gc_register_frozen_segment(
     handle
 }
 
-
 /// Updates the allocated and committed pointers of a previously registered frozen segment.
 ///
 /// # Safety

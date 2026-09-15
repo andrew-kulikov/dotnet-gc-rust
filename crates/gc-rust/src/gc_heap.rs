@@ -1,6 +1,10 @@
 use crate::alloc::{GcAllocContext, GcAllocFlags};
 use crate::object::Object;
+use crate::runtime::{
+    HResult, IGcToClr, S_OK, WriteBarrierOp, WriteBarrierParameters, gc_to_clr, install_gc_to_clr,
+};
 use std::alloc::{Layout, alloc_zeroed};
+use std::ptr;
 
 // Windows x64 CoreCLR: ObjHeader is a 4-byte alignment pad followed by the
 // 4-byte sync-block value. Object* points just past it, at the method table.
@@ -8,9 +12,10 @@ const OBJECT_ALIGNMENT: usize = 8;
 const OBJECT_HEADER_SIZE: usize = 8;
 const MIN_OBJECT_SIZE: usize = 24;
 
-type HResult = u32;
-
-const S_OK: HResult = 0;
+// ZeroGC never collects, so no reference is ephemeral and the card table is
+// intentionally unreachable. CoreCLR still requires a non-null card-table
+// address when its write barrier is initialized.
+static mut INERT_CARD_TABLE: u32 = 0;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_gc_loader_probe() -> HResult {
@@ -19,9 +24,41 @@ pub extern "C" fn rust_gc_loader_probe() -> HResult {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rust_gc_initialize() -> HResult {
+pub unsafe extern "C" fn rust_gc_initialize(gc_to_clr_source: *const IGcToClr) -> HResult {
     println!("rust_gc_initialize() called");
-    S_OK
+
+    // SAFETY: CoreCLR supplies a readable callback table whose context has
+    // process lifetime. Installation copies the table rather than retaining
+    // this pointer to the shim's temporary record.
+    if let Err(error) = unsafe { install_gc_to_clr(gc_to_clr_source) } {
+        return error;
+    }
+    let gc_to_clr = gc_to_clr().expect("callback table was just installed");
+
+    // The scattered ZeroGC allocations may occupy any user-mode address. The
+    // empty ephemeral interval makes every write-barrier card update a no-op;
+    // this is valid only while the collector never performs a collection.
+    let lowest_address: *mut u8 = ptr::without_provenance_mut(1);
+    let highest_address: *mut u8 = ptr::without_provenance_mut(usize::MAX);
+    let mut parameters = WriteBarrierParameters {
+        operation: WriteBarrierOp::Initialize,
+        is_runtime_suspended: true,
+        requires_upper_bounds_check: false,
+        card_table: &raw mut INERT_CARD_TABLE,
+        card_bundle_table: &raw mut INERT_CARD_TABLE,
+        lowest_address,
+        highest_address,
+        ephemeral_low: highest_address,
+        ephemeral_high: highest_address,
+        write_watch_table: ptr::null_mut(),
+        region_to_generation_table: ptr::null_mut(),
+        region_shr: 0,
+        region_use_bitwise_write_barrier: false,
+    };
+
+    // SAFETY: CoreCLR supplied this callback object and Initialize runs while
+    // the runtime is suspended. All non-null pointers have process lifetime.
+    unsafe { gc_to_clr.stomp_write_barrier(&mut parameters) }
 }
 
 /// Dummy Windows x64 allocator. Storage is zeroed and retained forever.
@@ -70,6 +107,7 @@ fn object_layout(size: usize) -> Option<Layout> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime::E_POINTER;
 
     #[test]
     fn loader_probe_succeeds() {
@@ -78,7 +116,9 @@ mod tests {
 
     #[test]
     fn loader_initialize_dummy_ok() {
-        assert_eq!(rust_gc_initialize(), S_OK);
+        // The actual initialization path is covered with a fake IGCToCLR in
+        // runtime.rs; a missing runtime callback is rejected deterministically.
+        assert_eq!(unsafe { rust_gc_initialize(ptr::null_mut()) }, E_POINTER);
     }
 
     #[test]
