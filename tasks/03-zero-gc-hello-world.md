@@ -69,6 +69,16 @@ Objects are scattered across native allocations, memory only grows, the heap
 cannot be walked from its bytes, and runtime features beyond the startup path may
 be wrong or unsupported. Do not disguise these limitations.
 
+The current Windows x64 ZeroGC deliberately configures an empty ephemeral range
+and supplies only a non-null sentinel card table. Normal managed references are
+below `ephemeral_low`, so the write barrier stores the reference and exits before
+indexing the card table. This is valid only while no collection consumes card
+metadata and the pinned runtime keeps using the expected barrier variant. The
+broad synthetic heap bounds, empty ephemeral range, and sentinel card table must
+be replaced with real bounds and card metadata when Mission 13 introduces a
+reserved managed heap. The complete rationale and safety envelope are recorded
+in [ZeroGC write-barrier configuration](../docs/ZERO_GC_WRITE_BARRIER.md).
+
 ## What this unlocks
 
 Mission 04 can drive the working prototype beyond `Hello, World!` and collect
