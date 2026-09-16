@@ -74,6 +74,21 @@ constexpr char ShimName[] = "dotnet-gc-rust";
 constexpr char ServerGCPrivateKey[] = "gcServer";
 constexpr char ServerGCPublicKey[] = "System.GC.Server";
 
+void WriteInitializationDiagnostic() noexcept
+{
+    std::fprintf(stderr, "dotnet-gc-rust: native shim reached Rust\n");
+    std::fflush(stderr);
+}
+
+void WriteUnsupportedServerGCDiagnostic() noexcept
+{
+    std::fprintf(
+        stderr,
+        "dotnet-gc-rust: unsupported configuration: Server GC is enabled; "
+        "only workstation GC is supported\n");
+    std::fflush(stderr);
+}
+
 #if defined(DOTNET_GC_RUST_ENABLE_STACK_TRACE)
 // ------------------------------------------------------
 // Debugging helpers for the native shim.
@@ -238,21 +253,6 @@ extern "C" HRESULT StompWriteBarrierBridge(
         // No C++ exception may cross the C ABI callback into Rust.
         return E_FAIL;
     }
-}
-
-void WriteInitializationDiagnostic() noexcept
-{
-    std::fprintf(stderr, "dotnet-gc-rust: native shim reached Rust\n");
-    std::fflush(stderr);
-}
-
-void WriteUnsupportedServerGCDiagnostic() noexcept
-{
-    std::fprintf(
-        stderr,
-        "dotnet-gc-rust: unsupported configuration: Server GC is enabled; "
-        "only workstation GC is supported\n");
-    std::fflush(stderr);
 }
 // IGCToCLR
 
