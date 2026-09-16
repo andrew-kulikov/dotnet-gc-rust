@@ -229,7 +229,7 @@ template<typename ReturnType>
 // ----------------------------------------------------------------------
 IGCToCLR* GlobalGCToCLR = nullptr;
 
-extern "C" HRESULT StompWriteBarrierBridge(
+extern "C" HRESULT StompWriteBarrier_Invoke(
     void* context,
     WriteBarrierParameters* parameters) noexcept
 {
@@ -362,7 +362,7 @@ public:
     {
         const RustGCToCLR gcToClr{
             GlobalGCToCLR,
-            StompWriteBarrierBridge,
+            StompWriteBarrier_Invoke,
         };
         HRESULT hr = rust_gc_initialize(&gcToClr);
         return hr;

@@ -44,7 +44,7 @@ pub struct WriteBarrierParameters {
     pub region_use_bitwise_write_barrier: bool,
 }
 
-type StompWriteBarrier =
+type StompWriteBarrierFunc =
     unsafe extern "C" fn(context: *mut c_void, parameters: *mut WriteBarrierParameters) -> HResult;
 
 /// C ABI callback table through which Rust asks CoreCLR to perform EE work.
@@ -58,13 +58,13 @@ type StompWriteBarrier =
 #[derive(Clone, Copy)]
 pub struct IGcToClr {
     context: *mut c_void,
-    stomp_write_barrier: Option<StompWriteBarrier>,
+    stomp_write_barrier: Option<StompWriteBarrierFunc>,
 }
 
 #[derive(Clone, Copy)]
 pub(crate) struct GcToClr {
     context: *mut c_void,
-    stomp_write_barrier: StompWriteBarrier,
+    stomp_write_barrier: StompWriteBarrierFunc,
 }
 
 // CoreCLR owns `context` for the process lifetime and its IGCToCLR methods are

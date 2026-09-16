@@ -12,18 +12,18 @@ struct gc_alloc_context;
 struct segment_info;
 struct WriteBarrierParameters;
 
+// IGCToCLR interface bridge
 extern "C"
 {
-    typedef HRESULT RustGCStompWriteBarrierFunction(
+    typedef HRESULT StompWriteBarrier_Func(
         void* context,
         WriteBarrierParameters* parameters) noexcept;
 }
-using RustGCStompWriteBarrier = RustGCStompWriteBarrierFunction*;
 
 struct RustGCToCLR
 {
     void* context;
-    RustGCStompWriteBarrier stomp_write_barrier;
+    StompWriteBarrier_Func* stomp_write_barrier;
 };
 
 // IGCHeap implementation
