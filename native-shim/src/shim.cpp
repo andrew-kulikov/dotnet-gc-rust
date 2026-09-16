@@ -74,52 +74,6 @@ constexpr char ShimName[] = "dotnet-gc-rust";
 constexpr char ServerGCPrivateKey[] = "gcServer";
 constexpr char ServerGCPublicKey[] = "System.GC.Server";
 
-// CoreCLR owns this process-long interface object. The adapter retains the
-// pointer so future callbacks can stay in C++ without exposing the C++ layout
-// to Rust.
-IGCToCLR* GlobalGCToCLR = nullptr;
-
-extern "C" HRESULT StompWriteBarrierBridge(
-    void* context,
-    WriteBarrierParameters* parameters) noexcept
-{
-    if ((context == nullptr) || (parameters == nullptr))
-    {
-        return E_POINTER;
-    }
-    if ((parameters->operation < WriteBarrierOp::StompResize) ||
-        (parameters->operation > WriteBarrierOp::SwitchToNonWriteWatch))
-    {
-        return E_INVALIDARG;
-    }
-
-    try
-    {
-        static_cast<IGCToCLR*>(context)->StompWriteBarrier(parameters);
-        return S_OK;
-    }
-    catch (...)
-    {
-        // No C++ exception may cross the C ABI callback into Rust.
-        return E_FAIL;
-    }
-}
-
-void WriteInitializationDiagnostic() noexcept
-{
-    std::fprintf(stderr, "dotnet-gc-rust: native shim reached Rust\n");
-    std::fflush(stderr);
-}
-
-void WriteUnsupportedServerGCDiagnostic() noexcept
-{
-    std::fprintf(
-        stderr,
-        "dotnet-gc-rust: unsupported configuration: Server GC is enabled; "
-        "only workstation GC is supported\n");
-    std::fflush(stderr);
-}
-
 #if defined(DOTNET_GC_RUST_ENABLE_STACK_TRACE)
 // ------------------------------------------------------
 // Debugging helpers for the native shim.
@@ -253,6 +207,55 @@ template<typename ReturnType>
             #name, __FUNCSIG__);                        \
     }
 // End of debugging helpers for the native shim.
+
+
+// ----------------------------------------------------------------------
+// IGCToCLR interface bridge
+// ----------------------------------------------------------------------
+IGCToCLR* GlobalGCToCLR = nullptr;
+
+extern "C" HRESULT StompWriteBarrierBridge(
+    void* context,
+    WriteBarrierParameters* parameters) noexcept
+{
+    if ((context == nullptr) || (parameters == nullptr))
+    {
+        return E_POINTER;
+    }
+    if ((parameters->operation < WriteBarrierOp::StompResize) ||
+        (parameters->operation > WriteBarrierOp::SwitchToNonWriteWatch))
+    {
+        return E_INVALIDARG;
+    }
+
+    try
+    {
+        static_cast<IGCToCLR*>(context)->StompWriteBarrier(parameters);
+        return S_OK;
+    }
+    catch (...)
+    {
+        // No C++ exception may cross the C ABI callback into Rust.
+        return E_FAIL;
+    }
+}
+
+void WriteInitializationDiagnostic() noexcept
+{
+    std::fprintf(stderr, "dotnet-gc-rust: native shim reached Rust\n");
+    std::fflush(stderr);
+}
+
+void WriteUnsupportedServerGCDiagnostic() noexcept
+{
+    std::fprintf(
+        stderr,
+        "dotnet-gc-rust: unsupported configuration: Server GC is enabled; "
+        "only workstation GC is supported\n");
+    std::fflush(stderr);
+}
+// IGCToCLR
+
 
 // ----------------------------------------------------------------------
 // IGCHeap interface implementation for the native shim.
