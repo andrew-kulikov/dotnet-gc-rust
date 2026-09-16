@@ -7,7 +7,7 @@ use crate::object::Object;
 ///
 /// CoreCLR reads an `OBJECTHANDLE` by dereferencing this slot, so this cannot be
 /// an index or an element that may move when a `Vec` grows.
-type ObjectHandle = *mut Object;
+pub(crate) type ObjectHandle = *mut Object;
 
 #[repr(C)]
 struct HandleRecord {
@@ -47,6 +47,13 @@ pub extern "C" fn rust_gc_handle_store_create_handle_of_type(
 }
 
 #[cfg(test)]
+pub(crate) unsafe fn destroy_test_handle(handle: ObjectHandle) {
+    unsafe {
+        std::alloc::dealloc(handle.cast::<u8>(), Layout::new::<HandleRecord>());
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::ffi::c_void;
@@ -67,12 +74,10 @@ mod tests {
         // the record remains allocated for the duration of the test.
         assert_eq!(unsafe { (*record).handle_type }, 2);
 
-        // There is intentionally no public destroy operation yet. The test can
-        // release its private record because CoreCLR never observes this handle.
-        // SAFETY: `record` came from `alloc(Layout::new::<HandleRecord>())`, is
-        // no longer used after this point, and has exactly the same layout.
+        // There is intentionally no public destroy operation yet. Tests can
+        // release private records because CoreCLR never observes these handles.
         unsafe {
-            std::alloc::dealloc(record.cast::<u8>(), Layout::new::<HandleRecord>());
+            destroy_test_handle(handle);
         }
     }
 }

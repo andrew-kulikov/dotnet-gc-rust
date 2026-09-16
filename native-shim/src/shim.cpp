@@ -646,7 +646,17 @@ public:
     ABORTING_OVERRIDE(bool, StoreObjectInHandleIfNull, (OBJECTHANDLE handle, Object* object));
     ABORTING_OVERRIDE(void, SetDependentHandleSecondary, (OBJECTHANDLE handle, Object* object));
     ABORTING_OVERRIDE(Object*, GetDependentHandleSecondary, (OBJECTHANDLE handle));
-    ABORTING_OVERRIDE(Object*, InterlockedCompareExchangeObjectInHandle, (OBJECTHANDLE handle, Object* object, Object* comparandObject));
+    Object* InterlockedCompareExchangeObjectInHandle(
+        OBJECTHANDLE handle,
+        Object* object,
+        Object* comparandObject) noexcept override
+    {
+        return static_cast<Object*>(
+            rust_gc_handle_manager_interlocked_compare_exchange_object_in_handle(
+                reinterpret_cast<RustGCObjectHandle>(handle),
+                static_cast<RustGCObject>(object),
+                static_cast<RustGCObject>(comparandObject)));
+    }
     ABORTING_OVERRIDE(HandleType, HandleFetchType, (OBJECTHANDLE handle));
     ABORTING_OVERRIDE(void, TraceRefCountedHandles, (HANDLESCANPROC callback, uintptr_t param1, uintptr_t param2));
 };
