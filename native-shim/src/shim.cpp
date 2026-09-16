@@ -347,7 +347,10 @@ public:
         GarbageCollect,
         (int generation, bool low_memory_p, int mode))
     ABORTING_OVERRIDE(unsigned, GetMaxGeneration, ())
-    ABORTING_OVERRIDE(void, SetFinalizationRun, (Object* obj))
+    void SetFinalizationRun(Object* obj) override
+    {
+        rust_gc_set_finalization_run(obj);
+    }
     ABORTING_OVERRIDE(
         bool,
         RegisterForFinalization,

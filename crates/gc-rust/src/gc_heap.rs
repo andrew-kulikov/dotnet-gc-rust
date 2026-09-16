@@ -92,6 +92,13 @@ pub extern "C" fn rust_gc_alloc(
     Object::from_ptr(object.cast())
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rust_gc_set_finalization_run(obj: Object) {
+    println!("rust_gc_set_finalization_run(obj: {obj:p}) called");
+    // TODO: Implement finalization bit flipping logic. Currently, this is a no-op.
+}
+
+
 fn object_layout(size: usize) -> Option<Layout> {
     if size < MIN_OBJECT_SIZE {
         return None;
