@@ -5,12 +5,20 @@ use crate::runtime::{
 };
 use std::alloc::{Layout, alloc_zeroed};
 use std::ptr;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // Windows x64 CoreCLR: ObjHeader is a 4-byte alignment pad followed by the
 // 4-byte sync-block value. Object* points just past it, at the method table.
 const OBJECT_ALIGNMENT: usize = 8;
 const OBJECT_HEADER_SIZE: usize = 8;
 const MIN_OBJECT_SIZE: usize = 24;
+
+// ZeroGC never releases managed-object storage. Keep that intentional leak
+// small and deterministic until Mission 04 adds runtime-configurable limits
+// and more detailed accounting.
+const ALLOCATION_LIMIT_BYTES: usize = 64 * 1024 * 1024;
+static ALLOCATED_BYTES: AtomicUsize = AtomicUsize::new(0);
+static ALLOCATION_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 // With the empty heap and ephemeral ranges below, barrier helpers never index
 // this placeholder. CoreCLR still requires a non-null card-table address when
@@ -107,12 +115,24 @@ pub extern "C" fn rust_gc_alloc(
         return Object::from_ptr(std::ptr::null_mut());
     };
 
+    if !try_reserve_bytes(&ALLOCATED_BYTES, layout.size(), ALLOCATION_LIMIT_BYTES) {
+        println!(
+            "rust_gc_alloc() rejected allocation: size={}, allocated_bytes={}, limit={ALLOCATION_LIMIT_BYTES}",
+            layout.size(),
+            ALLOCATED_BYTES.load(Ordering::Relaxed),
+        );
+        return Object::from_ptr(std::ptr::null_mut());
+    }
+
     // SAFETY: layout has a non-zero size and valid alignment. Zeroing initializes
     // both ObjHeader words, the method-table slot, and all object fields.
     let base = unsafe { alloc_zeroed(layout) };
     if base.is_null() {
+        // The budget reservation did not become owned storage.
+        ALLOCATED_BYTES.fetch_sub(layout.size(), Ordering::Relaxed);
         return Object::from_ptr(std::ptr::null_mut());
     }
+    ALLOCATION_COUNT.fetch_add(1, Ordering::Relaxed);
 
     // SAFETY: layout reserves at least MIN_OBJECT_SIZE bytes, so this offset
     // stays within the allocation and preserves 8-byte alignment.
@@ -129,8 +149,19 @@ pub unsafe extern "C" fn rust_gc_set_finalization_run(obj: Object) {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_gc_shutdown() {
-    println!("rust_gc_shutdown()");
-    // CoreCLR just flushes GC log in this method
+    println!(
+        "rust_gc_shutdown(): allocations={}, bytes={}, limit={ALLOCATION_LIMIT_BYTES}",
+        ALLOCATION_COUNT.load(Ordering::Relaxed),
+        ALLOCATED_BYTES.load(Ordering::Relaxed),
+    );
+}
+
+fn try_reserve_bytes(counter: &AtomicUsize, bytes: usize, limit: usize) -> bool {
+    counter
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |allocated| {
+            allocated.checked_add(bytes).filter(|next| *next <= limit)
+        })
+        .is_ok()
 }
 
 fn object_layout(size: usize) -> Option<Layout> {
@@ -193,5 +224,17 @@ mod tests {
         for size in [0, MIN_OBJECT_SIZE - 1, isize::MAX as usize, usize::MAX] {
             assert!(rust_gc_alloc(std::ptr::null_mut(), size, GcAllocFlags::NONE).is_null());
         }
+    }
+
+    #[test]
+    fn allocation_budget_rejects_limit_excess_and_overflow() {
+        let allocated = AtomicUsize::new(8);
+
+        assert!(try_reserve_bytes(&allocated, 8, 16));
+        assert_eq!(allocated.load(Ordering::Relaxed), 16);
+
+        assert!(!try_reserve_bytes(&allocated, 1, 16));
+        assert!(!try_reserve_bytes(&allocated, usize::MAX, usize::MAX));
+        assert_eq!(allocated.load(Ordering::Relaxed), 16);
     }
 }

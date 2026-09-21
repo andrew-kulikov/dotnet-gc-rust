@@ -21,24 +21,24 @@ the entire interface with silent defaults.
 
 ## Your challenge
 
-- [ ] Allocate each managed object from Rust-owned native memory using the
+- [x] Allocate each managed object from Rust-owned native memory using the
   simplest zero-initialized, correctly aligned strategy that satisfies the
   pinned object-header convention.
-- [ ] Keep every returned object address stable for the rest of the process and
+- [x] Keep every returned object address stable for the rest of the process and
   enforce a small configured allocation limit so the intentional leak is
   bounded.
-- [ ] Implement only the handle storage required by observed startup calls.
+- [x] Implement only the handle storage required by observed startup calls.
   Growing the store must not invalidate a handle address already given to
   CoreCLR.
-- [ ] Supply a pinned-contract-valid no-collection write-barrier configuration.
+- [x] Supply a pinned-contract-valid no-collection write-barrier configuration.
   It may deliberately make card updates irrelevant only because this mission
   never collects; document that reasoning and fail before managed execution if
   the pinned runtime cannot represent it safely.
-- [ ] Contain Rust panics and C++ exceptions at every boundary. Convert an
+- [x] Contain Rust panics and C++ exceptions at every boundary. Convert an
   allocation failure into one deterministic native failure path.
-- [ ] Change the smoke command so this mission expects normal process completion
+- [x] Change the smoke command so this mission expects normal process completion
   rather than the deliberate initialization failure from mission 01.
-- [ ] Keep the same sample runnable under the stock GC.
+- [x] Keep the same sample runnable under the stock GC.
 
 ## Checkpoint
 

@@ -414,16 +414,19 @@ def smoke(configuration: str, symbol_server: str | None) -> None:
         sys.stderr.flush()
 
     output = result.stdout + result.stderr
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"the loader exited with code {result.returncode}; expected zero"
+        )
     if (
         LOADER_DIAGNOSTIC not in output
+        or LOADER_SMOKE_OUTPUT not in result.stdout.splitlines()
         or "GC initialization failed" in output
-        or (result.returncode != 0 and INTERFACE_SHELL_DIAGNOSTIC not in output)
+        or INTERFACE_SHELL_DIAGNOSTIC in output
     ):
         raise RuntimeError("the loader failed initialization or exited unexpectedly")
-    if result.returncode == 0:
-        log("Loader smoke test completed successfully")
-    else:
-        log("Loader smoke test reached an unimplemented interface method")
+
+    log("Loader smoke test completed successfully")
 
     server_environment = environment.copy()
     server_environment["DOTNET_GCServer"] = "1"
