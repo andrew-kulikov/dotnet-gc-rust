@@ -26,6 +26,8 @@ The experimental second release will add a regional, frame-aware collection poli
 
 See [ROADMAP.md](ROADMAP.md) for the high-level project direction, [tasks/README.md](tasks/README.md) for the experiment-driven learning missions, [docs/DESIGN.md](docs/DESIGN.md) for architectural hypotheses, and [docs/RESOURCES.md](docs/RESOURCES.md) for the reading list.
 
+For a step-by-step explanation, see [Card tables and write barriers: why our ZeroGC works](docs/ZERO_GC_WRITE_BARRIER.md), with address examples, memory diagrams, and the bulk-copy crash investigation.
+
 ## Non-goals for 2026
 
 - Production readiness or formal real-time guarantees.

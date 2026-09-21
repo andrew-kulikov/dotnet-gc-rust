@@ -2,6 +2,10 @@
 
 The list is ordered for this project rather than by prestige. Read only what supports the current milestone, take short notes, and turn each concept into a test or experiment.
 
+## Repository study notes
+
+- [Card tables and write barriers: why our ZeroGC works](ZERO_GC_WRITE_BARRIER.md) — a detailed walkthrough of card-table address arithmetic, single-reference and bulk-copy barriers, CoreCLR versus NativeAOT, and the empty-range workaround.
+
 ## Primary path: the MiniDump series
 
 Kevin Gosse's series is the closest implementation guide to this project. Read the matching part immediately before the mission that needs it, then inspect the tagged source for details that the article omits.
