@@ -62,7 +62,7 @@ Build the Rust FFI library and C++ shim together:
 python scripts/build.py build
 ```
 
-The Python entry point locates Visual Studio, invokes Cargo and CMake with the x64 Visual Studio generator, and verifies the standalone-GC exports. Build products are staged under `out/build/native-shim/debug/stage`. Run the interface-shell smoke test, which expects initialization to succeed and then stop at the first named unsupported operation, with:
+The Python entry point locates Visual Studio, invokes Cargo and CMake with the x64 Visual Studio generator, and verifies the standalone-GC exports. Build products are staged under `out/build/native-shim/debug/stage`. Run the interface-shell smoke test, which accepts a normal exit or a named unsupported-operation abort after initialization, with:
 
 ```console
 python scripts/build.py smoke
@@ -156,8 +156,9 @@ stock-GC `LoaderSmoke` check. Run the pinned nightly Miri check separately:
 python scripts/build.py miri
 ```
 
-The native loader-boundary smoke builds the shim and intentionally fails once
-CoreCLR enters the shim; that failure is the expected red baseline:
+The native loader-boundary smoke builds the shim and accepts either a normal
+exit or a named unimplemented-method abort, without depending on which method
+is implemented next. Initialization failures and unexpected crashes fail the check:
 
 ```powershell
 python scripts/build.py smoke

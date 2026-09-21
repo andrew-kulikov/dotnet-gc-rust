@@ -17,7 +17,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SUBMODULE_PATH = Path("external/dotnet-runtime")
 LOADER_DIAGNOSTIC = "dotnet-gc-rust: native shim reached Rust"
 INTERFACE_SHELL_DIAGNOSTIC = (
-    "dotnet-gc-rust: unimplemented method called: SetFinalizationRun"
+    "dotnet-gc-rust: unimplemented method called:"
 )
 SERVER_GC_DIAGNOSTIC = (
     "dotnet-gc-rust: unsupported configuration: Server GC is enabled; "
@@ -415,13 +415,15 @@ def smoke(configuration: str, symbol_server: str | None) -> None:
 
     output = result.stdout + result.stderr
     if (
-        result.returncode == 0
-        or LOADER_DIAGNOSTIC not in output
-        or INTERFACE_SHELL_DIAGNOSTIC not in output
+        LOADER_DIAGNOSTIC not in output
         or "GC initialization failed" in output
+        or (result.returncode != 0 and INTERFACE_SHELL_DIAGNOSTIC not in output)
     ):
-        raise RuntimeError("the loader did not reach the expected interface-shell boundary")
-    log("Loader smoke test reached IGCHeap::SetFinalizationRun")
+        raise RuntimeError("the loader failed initialization or exited unexpectedly")
+    if result.returncode == 0:
+        log("Loader smoke test completed successfully")
+    else:
+        log("Loader smoke test reached an unimplemented interface method")
 
     server_environment = environment.copy()
     server_environment["DOTNET_GCServer"] = "1"

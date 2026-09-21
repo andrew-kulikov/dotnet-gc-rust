@@ -554,10 +554,11 @@ public:
         (
             NoGCRegionCallbackFinalizerWorkItem* callback,
             uint64_t callback_threshold))
-    ABORTING_OVERRIDE(
-        FinalizerWorkItem*,
-        GetExtraWorkForFinalization,
-        ())
+    FinalizerWorkItem* GetExtraWorkForFinalization() noexcept override
+    {
+        // TODO: Implement later, for now no extra work is provided.
+        return NULL;
+    }
     ABORTING_OVERRIDE(
         uint64_t,
         GetGenerationBudget,

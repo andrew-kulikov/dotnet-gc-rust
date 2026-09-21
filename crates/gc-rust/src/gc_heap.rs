@@ -12,9 +12,9 @@ const OBJECT_ALIGNMENT: usize = 8;
 const OBJECT_HEADER_SIZE: usize = 8;
 const MIN_OBJECT_SIZE: usize = 24;
 
-// ZeroGC never collects, so no reference is ephemeral and the card table is
-// intentionally unreachable. CoreCLR still requires a non-null card-table
-// address when its write barrier is initialized.
+// With the empty heap and ephemeral ranges below, barrier helpers never index
+// this placeholder. CoreCLR still requires a non-null card-table address when
+// its write barrier is initialized.
 static mut INERT_CARD_TABLE: u32 = 0;
 
 #[unsafe(no_mangle)]
@@ -35,10 +35,17 @@ pub unsafe extern "C" fn rust_gc_initialize(gc_to_clr_source: *const IGcToClr) -
     }
     let gc_to_clr = gc_to_clr().expect("callback table was just installed");
 
-    // The scattered ZeroGC allocations may occupy any user-mode address. The
-    // empty ephemeral interval makes every write-barrier card update a no-op;
-    // this is valid only while the collector never performs a collection.
-    let lowest_address: *mut u8 = ptr::without_provenance_mut(1);
+    // Study-only ZeroGC: retain all objects forever and disable card marking.
+    // An empty heap range makes checked stores and bulk reference copies skip
+    // the card table. An empty ephemeral range also makes unchecked object
+    // stores skip it (the x64 pre-grow barrier checks only ephemeral_low).
+    // Empty ephemeral bounds ALONE are insufficient: bulk copies index the
+    // card table based on the destination's heap membership, without checking
+    // the source references against the ephemeral range.
+    // These sentinel addresses are comparison values, never dereferenced.
+    // Before adding collection or heap-membership-dependent features, replace
+    // this setup with real heap bounds and correctly biased card/bundle tables.
+    let lowest_address: *mut u8 = ptr::without_provenance_mut(usize::MAX);
     let highest_address: *mut u8 = ptr::without_provenance_mut(usize::MAX);
     let mut parameters = WriteBarrierParameters {
         operation: WriteBarrierOp::Initialize,
@@ -57,7 +64,8 @@ pub unsafe extern "C" fn rust_gc_initialize(gc_to_clr_source: *const IGcToClr) -
     };
 
     // SAFETY: CoreCLR supplied this callback object and Initialize runs while
-    // the runtime is suspended. All non-null pointers have process lifetime.
+    // the runtime is suspended. Table storage has process lifetime; the empty
+    // ranges prevent indexing it and their sentinel bounds are never accessed.
     unsafe { gc_to_clr.stomp_write_barrier(&mut parameters) }
 }
 
@@ -97,7 +105,6 @@ pub unsafe extern "C" fn rust_gc_set_finalization_run(obj: Object) {
     println!("rust_gc_set_finalization_run(obj: {obj:p}) called");
     // TODO: Implement finalization bit flipping logic. Currently, this is a no-op.
 }
-
 
 fn object_layout(size: usize) -> Option<Layout> {
     if size < MIN_OBJECT_SIZE {
