@@ -52,6 +52,8 @@ extern "C" RustGCObjectHandle rust_gc_handle_store_create_handle_of_type(
 
 // IGCHandleManager implementation
 extern "C" bool rust_gc_handle_manager_initialize() noexcept;
+extern "C" void rust_gc_handle_manager_destroy_handle_of_unknown_type(
+    RustGCObjectHandle handle) noexcept;
 extern "C" void rust_gc_handle_manager_store_object_in_handle(
     RustGCObjectHandle handle,
     RustGCObject object) noexcept;

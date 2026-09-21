@@ -643,7 +643,11 @@ public:
     }
     ABORTING_OVERRIDE(OBJECTHANDLE, CreateDuplicateHandle, (OBJECTHANDLE handle));
     ABORTING_OVERRIDE(void, DestroyHandleOfType, (OBJECTHANDLE handle, HandleType type));
-    ABORTING_OVERRIDE(void, DestroyHandleOfUnknownType, (OBJECTHANDLE handle));
+    void DestroyHandleOfUnknownType(OBJECTHANDLE handle) noexcept override
+    {
+        rust_gc_handle_manager_destroy_handle_of_unknown_type(
+            reinterpret_cast<RustGCObjectHandle>(handle));
+    }
     ABORTING_OVERRIDE(void, SetExtraInfoForHandle, (OBJECTHANDLE handle, HandleType type, void* pExtraInfo));
     ABORTING_OVERRIDE(void*, GetExtraInfoFromHandle, (OBJECTHANDLE handle));
     void StoreObjectInHandle(OBJECTHANDLE handle, Object* object) noexcept override

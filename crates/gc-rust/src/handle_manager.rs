@@ -10,6 +10,15 @@ pub extern "C" fn rust_gc_handle_manager_initialize() -> bool {
     true
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_gc_handle_manager_destroy_handle_of_unknown_type(handle: ObjectHandle) {
+    println!("rust_gc_handle_manager_destroy_handle_of_unknown_type(handle: {handle:p})");
+
+    // ZeroGC intentionally keeps handle records alive for the lifetime of the
+    // process. A collecting GC must reclaim or recycle this record once it can
+    // guarantee that no caller can access the handle again.
+}
+
 /// Atomically replace the object in `handle` when it equals `comparand_object`.
 ///
 /// The object previously stored in the handle is returned whether or not the
@@ -77,6 +86,18 @@ mod tests {
     #[test]
     fn handle_manager_initialize_succeeds() {
         assert!(rust_gc_handle_manager_initialize());
+    }
+
+    #[test]
+    fn destroy_handle_of_unknown_type_is_a_zero_gc_no_op() {
+        let mut object_storage = 0_u8;
+        let object = object_for(&mut object_storage);
+        let handle = rust_gc_handle_store_create_handle_of_type(object, 2);
+
+        rust_gc_handle_manager_destroy_handle_of_unknown_type(handle);
+
+        assert_eq!(unsafe { *handle }, object);
+        unsafe { destroy_test_handle(handle) };
     }
 
     #[test]
