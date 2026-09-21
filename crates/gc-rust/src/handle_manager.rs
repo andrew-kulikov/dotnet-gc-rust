@@ -26,7 +26,9 @@ pub unsafe extern "C" fn rust_gc_handle_manager_interlocked_compare_exchange_obj
     object: Object,
     comparand_object: Object,
 ) -> Object {
-    println!("rust_gc_handle_manager_interlocked_compare_exchange_object_in_handle(handle: {handle:p}, object: {object:p}, comparand_object: {comparand_object:p}) called");
+    println!(
+        "rust_gc_handle_manager_interlocked_compare_exchange_object_in_handle(handle: {handle:p}, object: {object:p}, comparand_object: {comparand_object:p})"
+    );
     // Object is transparent over `*mut c_void`, and handle records are aligned
     // for an Object. AtomicPtr::from_ptr is the standard atomic view over an
     // existing pointer slot; the caller upholds its lifetime and race rules.
@@ -43,6 +45,23 @@ pub unsafe extern "C" fn rust_gc_handle_manager_interlocked_compare_exchange_obj
         .unwrap_or_else(|current| current);
 
     Object::from_ptr(previous)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rust_gc_handle_manager_store_object_in_handle(
+    handle: ObjectHandle,
+    object: Object,
+) {
+    println!(
+        "rust_gc_handle_manager_store_object_in_handle(handle: {handle:p}, object: {object:p})"
+    );
+
+    // CoreCLR publishes handle values with release semantics so writes that
+    // initialized the object are visible before another thread observes the
+    // handle. ZeroGC never collects, so it has no handle write barrier or
+    // collection metadata to update here.
+    let atomic = unsafe { AtomicPtr::<c_void>::from_ptr(handle.cast::<*mut c_void>()) };
+    atomic.store(object.as_ptr(), Ordering::Release);
 }
 
 #[cfg(test)]
@@ -119,6 +138,20 @@ mod tests {
 
         assert_eq!(previous, original);
         assert!(unsafe { *handle }.is_null());
+        unsafe { destroy_test_handle(handle) };
+    }
+
+    #[test]
+    fn store_object_in_handle_replaces_the_object() {
+        let mut original_storage = 0_u8;
+        let mut replacement_storage = 0_u8;
+        let original = object_for(&mut original_storage);
+        let replacement = object_for(&mut replacement_storage);
+        let handle = rust_gc_handle_store_create_handle_of_type(original, 2);
+
+        unsafe { rust_gc_handle_manager_store_object_in_handle(handle, replacement) };
+
+        assert_eq!(unsafe { *handle }, replacement);
         unsafe { destroy_test_handle(handle) };
     }
 }
