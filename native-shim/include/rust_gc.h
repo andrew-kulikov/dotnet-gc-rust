@@ -40,6 +40,7 @@ extern "C" void rust_gc_update_frozen_segment(
     uint8_t* allocated,
     uint8_t* committed) noexcept;
 extern "C" void rust_gc_set_finalization_run(RustGCObject obj) noexcept;
+extern "C" unsigned rust_gc_get_max_generation() noexcept;
 
 // IGCHandleStore implementation
 using RustGCObjectHandle = RustGCObject*;

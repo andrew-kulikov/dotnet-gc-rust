@@ -24,6 +24,13 @@ pub extern "C" fn rust_gc_loader_probe() -> HResult {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn rust_gc_get_max_generation() -> u32 {
+    // For now only the ephemeral generation (generation 0) exists.
+    // TODO: Change in case more generations are added.
+    0
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_gc_initialize(gc_to_clr_source: *const IGcToClr) -> HResult {
     println!("rust_gc_initialize() called");
 
