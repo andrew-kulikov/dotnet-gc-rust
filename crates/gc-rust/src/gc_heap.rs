@@ -31,6 +31,13 @@ pub extern "C" fn rust_gc_get_max_generation() -> u32 {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn rust_gc_collection_count(_generation: i32, _get_bgc_fgc_coutn: i32) -> i32 {
+    // Zero GC does not perform any collections, so the count is always zero (for now).
+    // TODO: Implement actual collection counting when more generations are added.
+    0
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_gc_initialize(gc_to_clr_source: *const IGcToClr) -> HResult {
     println!("rust_gc_initialize() called");
 

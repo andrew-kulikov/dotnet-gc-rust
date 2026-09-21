@@ -327,10 +327,10 @@ public:
         (int millisecondsTimeout))
 
     ABORTING_OVERRIDE(unsigned, WhichGeneration, (Object* obj))
-    ABORTING_OVERRIDE(
-        int,
-        CollectionCount,
-        (int generation, int get_bgc_fgc_coutn))
+    int CollectionCount(int generation, int get_bgc_fgc_coutn)
+    {
+        return rust_gc_collection_count(generation, get_bgc_fgc_coutn);
+    }
     ABORTING_OVERRIDE(
         int,
         StartNoGCRegion,
