@@ -379,10 +379,10 @@ public:
         IsHeapPointer,
         (void* object, bool small_heap_only))
     ABORTING_OVERRIDE(unsigned, GetCondemnedGeneration, ())
-    ABORTING_OVERRIDE(
-        bool,
-        IsGCInProgressHelper,
-        (bool bConsiderGCStart))
+    bool IsGCInProgressHelper(bool bConsiderGCStart) noexcept override
+    {
+        return rust_gc_is_gc_in_progress_helper(bConsiderGCStart);
+    }
     ABORTING_OVERRIDE(unsigned, GetGcCount, ())
     ABORTING_OVERRIDE(
         bool,

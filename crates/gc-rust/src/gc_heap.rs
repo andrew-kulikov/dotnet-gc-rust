@@ -38,6 +38,13 @@ pub extern "C" fn rust_gc_collection_count(_generation: i32, _get_bgc_fgc_coutn:
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn rust_gc_is_gc_in_progress_helper(_b_consider_gc_start: bool) -> bool {
+    // Zero GC never performs any collections, so GC is never in progress.
+    // TODO: Implement actual GC progress tracking when more generations are added.
+    false
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_gc_initialize(gc_to_clr_source: *const IGcToClr) -> HResult {
     println!("rust_gc_initialize() called");
 
