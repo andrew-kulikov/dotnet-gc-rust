@@ -408,7 +408,10 @@ public:
         void,
         SetYieldProcessorScalingFactor,
         (float yieldProcessorScalingFactor))
-    ABORTING_OVERRIDE(void, Shutdown, ())
+    void Shutdown() override
+    {
+        rust_gc_shutdown();
+    }
 
     ABORTING_OVERRIDE(
         size_t,

@@ -19,7 +19,7 @@ static mut INERT_CARD_TABLE: u32 = 0;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_gc_loader_probe() -> HResult {
-    println!("rust_gc_loader_probe() called");
+    println!("rust_gc_loader_probe()");
     S_OK
 }
 
@@ -46,7 +46,7 @@ pub extern "C" fn rust_gc_is_gc_in_progress_helper(_b_consider_gc_start: bool) -
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_gc_initialize(gc_to_clr_source: *const IGcToClr) -> HResult {
-    println!("rust_gc_initialize() called");
+    println!("rust_gc_initialize()");
 
     // SAFETY: CoreCLR supplies a readable callback table whose context has
     // process lifetime. Installation copies the table rather than retaining
@@ -101,7 +101,7 @@ pub extern "C" fn rust_gc_alloc(
     size: usize,
     flags: GcAllocFlags,
 ) -> Object {
-    println!("rust_gc_alloc(context: {acontext:p}, size: {size}, flags: {flags:?}) called");
+    println!("rust_gc_alloc(context: {acontext:p}, size: {size}, flags: {flags:?})");
 
     let Some(layout) = object_layout(size) else {
         return Object::from_ptr(std::ptr::null_mut());
@@ -123,8 +123,14 @@ pub extern "C" fn rust_gc_alloc(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_gc_set_finalization_run(obj: Object) {
-    println!("rust_gc_set_finalization_run(obj: {obj:p}) called");
+    println!("rust_gc_set_finalization_run(obj: {obj:p})");
     // TODO: Implement finalization bit flipping logic. Currently, this is a no-op.
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rust_gc_shutdown() {
+    println!("rust_gc_shutdown()");
+    // CoreCLR just flushes GC log in this method
 }
 
 fn object_layout(size: usize) -> Option<Layout> {
