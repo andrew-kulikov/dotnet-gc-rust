@@ -207,6 +207,7 @@ template<typename ReturnType>
         "dotnet-gc-rust: unimplemented method called: %s (%s)\n",
         method,
         signature);
+    rust_gc_report();
 
 #if defined(DOTNET_GC_RUST_ENABLE_STACK_TRACE)
     PrintStackTrace();
@@ -428,7 +429,15 @@ public:
         size_t size,
         uint32_t flags) override
     {
-        return static_cast<Object*>(rust_gc_alloc(acontext, size, flags));
+        Object* object = static_cast<Object*>(rust_gc_alloc(acontext, size, flags));
+        if (object == nullptr)
+        {
+            std::fprintf(stderr, "dotnet-gc-rust: IGCHeap::Alloc failed\n");
+            rust_gc_report();
+            std::fflush(stderr);
+            std::abort();
+        }
+        return object;
     }
     void PublishObject(uint8_t* obj) override
     {

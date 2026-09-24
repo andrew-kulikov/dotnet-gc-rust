@@ -44,6 +44,7 @@ extern "C" unsigned rust_gc_get_max_generation() noexcept;
 extern "C" int rust_gc_collection_count(int generation, int get_bgc_fgc_coutn) noexcept;
 extern "C" bool rust_gc_is_gc_in_progress_helper(bool bConsiderGCStart) noexcept;
 extern "C" void rust_gc_shutdown() noexcept;
+extern "C" void rust_gc_report() noexcept;
 
 // IGCHandleStore implementation
 using RustGCObjectHandle = RustGCObject*;

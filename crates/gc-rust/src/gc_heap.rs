@@ -5,7 +5,7 @@ use crate::runtime::{
 };
 use std::alloc::{Layout, alloc_zeroed};
 use std::ptr;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{LazyLock, Mutex, OnceLock};
 
 // Windows x64 CoreCLR: ObjHeader is a 4-byte alignment pad followed by the
 // 4-byte sync-block value. Object* points just past it, at the method table.
@@ -13,12 +13,94 @@ const OBJECT_ALIGNMENT: usize = 8;
 const OBJECT_HEADER_SIZE: usize = 8;
 const MIN_OBJECT_SIZE: usize = 24;
 
-// ZeroGC never releases managed-object storage. Keep that intentional leak
-// small and deterministic until Mission 04 adds runtime-configurable limits
-// and more detailed accounting.
-const ALLOCATION_LIMIT_BYTES: usize = 64 * 1024 * 1024;
-static ALLOCATED_BYTES: AtomicUsize = AtomicUsize::new(0);
-static ALLOCATION_COUNT: AtomicUsize = AtomicUsize::new(0);
+const DEFAULT_LIMIT_BYTES: usize = 64 * 1024 * 1024;
+static LIMIT_BYTES: OnceLock<usize> = OnceLock::new();
+static LEDGER: LazyLock<Mutex<Ledger>> = LazyLock::new(|| Mutex::new(Ledger::default()));
+
+#[derive(Default)]
+struct Ledger {
+    requests: usize,
+    successful: usize,
+    requested_bytes: usize,
+    owned_bytes: usize,
+    // Diagnostic metadata only. A collection must never use this as liveness data.
+    ranges: Vec<(usize, usize)>,
+}
+
+impl Ledger {
+    fn allocate(&mut self, size: usize, limit: usize) -> Object {
+        self.requests = self.requests.saturating_add(1);
+        self.requested_bytes = self.requested_bytes.saturating_add(size);
+        let Some(layout) = object_layout(size) else {
+            eprintln!("ZeroGC: invalid allocation size: {size}");
+            return Object::from_ptr(ptr::null_mut());
+        };
+        let Some(next_owned) = self.owned_bytes.checked_add(layout.size()) else {
+            eprintln!("ZeroGC: allocation accounting overflow");
+            return Object::from_ptr(ptr::null_mut());
+        };
+        if next_owned > limit {
+            eprintln!(
+                "ZeroGC: allocation limit exceeded: owned={} requested={} limit={limit}",
+                self.owned_bytes,
+                layout.size()
+            );
+            return Object::from_ptr(ptr::null_mut());
+        }
+        if self.ranges.try_reserve(1).is_err() {
+            eprintln!("ZeroGC: allocation registry exhausted");
+            return Object::from_ptr(ptr::null_mut());
+        }
+
+        // SAFETY: layout is nonzero and aligned; the returned block is retained
+        // for the process lifetime and never handed to a second allocation.
+        let base = unsafe { alloc_zeroed(layout) };
+        if base.is_null() {
+            eprintln!("ZeroGC: native allocation failed");
+            return Object::from_ptr(ptr::null_mut());
+        }
+        let start = base as usize;
+        let Some(end) = start.checked_add(layout.size()) else {
+            // SAFETY: base was just allocated with this layout.
+            unsafe { std::alloc::dealloc(base, layout) };
+            eprintln!("ZeroGC: native address overflow");
+            return Object::from_ptr(ptr::null_mut());
+        };
+        self.ranges.push((start, end));
+        self.successful += 1;
+        self.owned_bytes = next_owned;
+
+        // SAFETY: every valid object layout contains its 8-byte header.
+        Object::from_ptr(unsafe { base.add(OBJECT_HEADER_SIZE) }.cast())
+    }
+
+    fn report(&mut self, limit: usize) {
+        self.ranges.sort_unstable();
+        let disjoint = self.ranges.windows(2).all(|pair| pair[0].1 <= pair[1].0);
+        let gaps = self
+            .ranges
+            .windows(2)
+            .filter(|pair| pair[0].1 < pair[1].0)
+            .count();
+        let registry_bytes = self.ranges.capacity() * size_of::<(usize, usize)>();
+        eprintln!(
+            "ZeroGC counters: requests={} successful={} requested_bytes={} owned_bytes={} limit={} ranges={} registry_bytes={} disjoint={} gaps={}",
+            self.requests,
+            self.successful,
+            self.requested_bytes,
+            self.owned_bytes,
+            limit,
+            self.ranges.len(),
+            registry_bytes,
+            disjoint,
+            gaps
+        );
+        for (start, end) in self.ranges.iter().take(2) {
+            eprintln!("ZeroGC native range: [{start:#x}, {end:#x})");
+        }
+        eprintln!("ZeroGC heap walk: unavailable; objects are separate native allocations");
+    }
+}
 
 // With the empty heap and ephemeral ranges below, barrier helpers never index
 // this placeholder. CoreCLR still requires a non-null card-table address when
@@ -55,6 +137,22 @@ pub extern "C" fn rust_gc_is_gc_in_progress_helper(_b_consider_gc_start: bool) -
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_gc_initialize(gc_to_clr_source: *const IGcToClr) -> HResult {
     println!("rust_gc_initialize()");
+
+    let limit = match std::env::var("ZERO_GC_LIMIT_BYTES") {
+        Ok(value) => match value.parse::<usize>() {
+            Ok(limit) if limit > 0 => limit,
+            _ => {
+                eprintln!("ZeroGC: ZERO_GC_LIMIT_BYTES must be a positive integer");
+                DEFAULT_LIMIT_BYTES
+            }
+        },
+        Err(std::env::VarError::NotPresent) => DEFAULT_LIMIT_BYTES,
+        Err(std::env::VarError::NotUnicode(_)) => {
+            eprintln!("ZeroGC: ZERO_GC_LIMIT_BYTES must be a positive integer");
+            DEFAULT_LIMIT_BYTES
+        }
+    };
+    let _ = LIMIT_BYTES.set(limit);
 
     // SAFETY: CoreCLR supplies a readable callback table whose context has
     // process lifetime. Installation copies the table rather than retaining
@@ -109,36 +207,9 @@ pub extern "C" fn rust_gc_alloc(
     size: usize,
     flags: GcAllocFlags,
 ) -> Object {
-    println!("rust_gc_alloc(context: {acontext:p}, size: {size}, flags: {flags:?})");
-
-    let Some(layout) = object_layout(size) else {
-        return Object::from_ptr(std::ptr::null_mut());
-    };
-
-    if !try_reserve_bytes(&ALLOCATED_BYTES, layout.size(), ALLOCATION_LIMIT_BYTES) {
-        println!(
-            "rust_gc_alloc() rejected allocation: size={}, allocated_bytes={}, limit={ALLOCATION_LIMIT_BYTES}",
-            layout.size(),
-            ALLOCATED_BYTES.load(Ordering::Relaxed),
-        );
-        return Object::from_ptr(std::ptr::null_mut());
-    }
-
-    // SAFETY: layout has a non-zero size and valid alignment. Zeroing initializes
-    // both ObjHeader words, the method-table slot, and all object fields.
-    let base = unsafe { alloc_zeroed(layout) };
-    if base.is_null() {
-        // The budget reservation did not become owned storage.
-        ALLOCATED_BYTES.fetch_sub(layout.size(), Ordering::Relaxed);
-        return Object::from_ptr(std::ptr::null_mut());
-    }
-    ALLOCATION_COUNT.fetch_add(1, Ordering::Relaxed);
-
-    // SAFETY: layout reserves at least MIN_OBJECT_SIZE bytes, so this offset
-    // stays within the allocation and preserves 8-byte alignment.
-    let object = unsafe { base.add(OBJECT_HEADER_SIZE) };
-    println!("rust_gc_alloc() returning object at {object:p}");
-    Object::from_ptr(object.cast())
+    let _ = (acontext, flags);
+    let mut ledger = LEDGER.lock().unwrap_or_else(|poison| poison.into_inner());
+    ledger.allocate(size, *LIMIT_BYTES.get().unwrap_or(&DEFAULT_LIMIT_BYTES))
 }
 
 #[unsafe(no_mangle)]
@@ -149,19 +220,13 @@ pub unsafe extern "C" fn rust_gc_set_finalization_run(obj: Object) {
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_gc_shutdown() {
-    println!(
-        "rust_gc_shutdown(): allocations={}, bytes={}, limit={ALLOCATION_LIMIT_BYTES}",
-        ALLOCATION_COUNT.load(Ordering::Relaxed),
-        ALLOCATED_BYTES.load(Ordering::Relaxed),
-    );
+    rust_gc_report();
 }
 
-fn try_reserve_bytes(counter: &AtomicUsize, bytes: usize, limit: usize) -> bool {
-    counter
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |allocated| {
-            allocated.checked_add(bytes).filter(|next| *next <= limit)
-        })
-        .is_ok()
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_gc_report() {
+    let mut ledger = LEDGER.lock().unwrap_or_else(|poison| poison.into_inner());
+    ledger.report(*LIMIT_BYTES.get().unwrap_or(&DEFAULT_LIMIT_BYTES));
 }
 
 fn object_layout(size: usize) -> Option<Layout> {
@@ -227,14 +292,42 @@ mod tests {
     }
 
     #[test]
-    fn allocation_budget_rejects_limit_excess_and_overflow() {
-        let allocated = AtomicUsize::new(8);
+    fn ledger_reconciles_success_rejection_and_disjoint_ranges() {
+        let mut ledger = Ledger::default();
+        let first = ledger.allocate(25, 64);
+        let second = ledger.allocate(25, 64);
+        assert!(!first.is_null() && !second.is_null());
+        assert!(ledger.allocate(24, 64).is_null());
+        assert!(ledger.allocate(usize::MAX, 64).is_null());
+        assert_eq!(ledger.requests, 4);
+        assert_eq!(ledger.successful, 2);
+        assert_eq!(ledger.requested_bytes, usize::MAX);
+        assert_eq!(ledger.owned_bytes, 64);
+        assert_eq!(ledger.ranges.len(), 2);
+        let (a, b) = (ledger.ranges[0], ledger.ranges[1]);
+        assert!(a.1 <= b.0 || b.1 <= a.0);
 
-        assert!(try_reserve_bytes(&allocated, 8, 16));
-        assert_eq!(allocated.load(Ordering::Relaxed), 16);
+        for object in [first, second] {
+            // SAFETY: these allocations belong only to this test and use the
+            // recorded object layout. Production never frees managed storage.
+            unsafe {
+                std::alloc::dealloc(
+                    object.as_ptr().cast::<u8>().sub(OBJECT_HEADER_SIZE),
+                    object_layout(25).unwrap(),
+                );
+            }
+        }
+    }
 
-        assert!(!try_reserve_bytes(&allocated, 1, 16));
-        assert!(!try_reserve_bytes(&allocated, usize::MAX, usize::MAX));
-        assert_eq!(allocated.load(Ordering::Relaxed), 16);
+    #[test]
+    fn ledger_rejects_accounting_overflow_without_changing_owned_bytes() {
+        let mut ledger = Ledger {
+            owned_bytes: usize::MAX - 8,
+            ..Ledger::default()
+        };
+        assert!(ledger.allocate(24, usize::MAX).is_null());
+        assert_eq!(ledger.requests, 1);
+        assert_eq!(ledger.successful, 0);
+        assert_eq!(ledger.owned_bytes, usize::MAX - 8);
     }
 }

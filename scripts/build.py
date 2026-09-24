@@ -24,6 +24,13 @@ SERVER_GC_DIAGNOSTIC = (
     "only workstation GC is supported"
 )
 LOADER_SMOKE_OUTPUT = "Hello, World!"
+SCENARIOS = ("smoke", "small", "large", "threads", "pin", "finalize", "exhaust")
+UNSUPPORTED_METHODS = {
+    "large": "GetLOHThreshold",
+    "threads": "FixAllocContext",
+    "finalize": "RegisterForFinalization",
+}
+EXHAUST_LIMIT_BYTES = 1024 * 1024
 MIRI_TOOLCHAIN = "nightly-2026-08-17"
 SYMBOL_CACHE = Path(r"D:\\temp\\symbol-cache")
 MICROSOFT_SYMBOL_SERVER = "https://msdl.microsoft.com/download/symbols"
@@ -448,6 +455,146 @@ def smoke(configuration: str, symbol_server: str | None) -> None:
     log("Loader smoke test rejected Server GC")
 
 
+def matrix(report_dir: Path | None = None) -> None:
+    """Run isolated managed scenarios under both collectors and check diagnostics."""
+    if report_dir is not None:
+        report_dir = (REPOSITORY_ROOT / report_dir).resolve()
+        report_dir.mkdir(parents=True, exist_ok=True)
+
+    shim = build("debug")
+    environment = clean_stock_gc_environment()
+    environment.pop("ZERO_GC_LIMIT_BYTES", None)
+    environment["DOTNET_GCServer"] = "0"
+    project = REPOSITORY_ROOT / "samples/LoaderSmoke/LoaderSmoke.csproj"
+    run(["dotnet", "build", str(project)], env=environment)
+    sample = REPOSITORY_ROOT / "samples/LoaderSmoke/bin/Debug/net10.0/LoaderSmoke.exe"
+
+    custom_environment = environment.copy()
+    custom_environment["DOTNET_GCPath"] = str(shim)
+    custom_environment["PATH"] = f"{shim.parent}{os.pathsep}{environment.get('PATH', '')}"
+
+    def execute(
+        scenario: str, env: dict[str, str], label: str
+    ) -> subprocess.CompletedProcess[str]:
+        arguments = [] if scenario == "smoke" else [scenario]
+        result = subprocess.run(
+            [str(sample), *arguments],
+            cwd=REPOSITORY_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if report_dir is not None:
+            (report_dir / f"{label}.stdout.log").write_text(
+                result.stdout, encoding="utf-8"
+            )
+            (report_dir / f"{label}.stderr.log").write_text(
+                result.stderr, encoding="utf-8"
+            )
+        return result
+
+    def check_counters(output: str, expected_limit: int, failed: bool) -> tuple[int, int]:
+        matches = re.findall(
+            r"ZeroGC counters: requests=(\d+) successful=(\d+) "
+            r"requested_bytes=(\d+) owned_bytes=(\d+) limit=(\d+) "
+            r"ranges=(\d+) registry_bytes=(\d+) disjoint=(true|false) gaps=(\d+)",
+            output,
+        )
+        if not matches:
+            raise RuntimeError("ZeroGC did not report allocation counters")
+        requests, successful, requested, owned, limit, ranges, registry_bytes, disjoint, gaps = matches[-1]
+        requests, successful, requested, owned, limit, ranges, registry_bytes, gaps = map(
+            int, (requests, successful, requested, owned, limit, ranges, registry_bytes, gaps)
+        )
+        if not (
+            requests >= successful > 0
+            and requested > 0
+            and owned <= limit == expected_limit
+            and ranges == successful
+            and registry_bytes >= ranges * 16
+            and disjoint == "true"
+            and gaps > 0
+            and output.count("ZeroGC native range:") >= 2
+            and "ZeroGC heap walk: unavailable" in output
+            and (requests == successful + 1 if failed else requests == successful)
+        ):
+            raise RuntimeError(f"ZeroGC counters did not reconcile: {matches[-1]}")
+        return successful, owned
+
+    for scenario in SCENARIOS:
+        stock = execute(scenario, environment, f"{scenario}.stock")
+        success_line = (
+            LOADER_SMOKE_OUTPUT if scenario == "smoke" else f"scenario {scenario} ok"
+        )
+        if stock.returncode != 0 or success_line not in stock.stdout.splitlines():
+            raise RuntimeError(
+                f"stock GC {scenario} failed ({stock.returncode}):\n"
+                f"{stock.stdout}\n{stock.stderr}"
+            )
+
+        scenario_environment = custom_environment.copy()
+        expected_limit = DEFAULT_MATRIX_LIMIT_BYTES
+        if scenario == "exhaust":
+            expected_limit = EXHAUST_LIMIT_BYTES
+            scenario_environment["ZERO_GC_LIMIT_BYTES"] = str(expected_limit)
+
+        attempts = 2 if scenario == "exhaust" else 1
+        exhaustion_counts = []
+        result = ""
+        for attempt in range(1, attempts + 1):
+            suffix = f".{attempt}" if attempts > 1 else ""
+            custom = execute(
+                scenario, scenario_environment, f"{scenario}.zerogc{suffix}"
+            )
+            output = custom.stdout + custom.stderr
+            methods = re.findall(
+                r"dotnet-gc-rust: unimplemented method called: (\w+)", output
+            )
+            if scenario == "exhaust":
+                valid = (
+                    custom.returncode != 0
+                    and "ZeroGC: allocation limit exceeded" in output
+                    and "dotnet-gc-rust: IGCHeap::Alloc failed" in output
+                    and not methods
+                )
+                if valid:
+                    exhaustion_counts.append(check_counters(output, expected_limit, True))
+                result = "deterministic exhaustion at IGCHeap::Alloc"
+            elif scenario in UNSUPPORTED_METHODS:
+                valid = (
+                    custom.returncode != 0
+                    and methods
+                    and methods[-1] == UNSUPPORTED_METHODS[scenario]
+                )
+                if valid:
+                    check_counters(output, expected_limit, False)
+                result = f"unsupported by {UNSUPPORTED_METHODS[scenario]}"
+            else:
+                valid = (
+                    custom.returncode == 0
+                    and success_line in custom.stdout.splitlines()
+                    and not methods
+                )
+                if valid:
+                    check_counters(output, expected_limit, False)
+                result = "works"
+            if not valid:
+                raise RuntimeError(
+                    f"ZeroGC {scenario}: unexpected defect ({custom.returncode}):\n"
+                    f"{output}"
+                )
+        if scenario == "exhaust" and exhaustion_counts[0] != exhaustion_counts[1]:
+            raise RuntimeError(f"exhaustion was not reproducible: {exhaustion_counts}")
+        log(f"{scenario}: stock GC works; ZeroGC {result}")
+    if report_dir is not None:
+        log(f"Matrix logs: {report_dir}")
+
+
+DEFAULT_MATRIX_LIMIT_BYTES = 64 * 1024 * 1024
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -456,6 +603,15 @@ def parse_arguments() -> argparse.Namespace:
         "verify", help="run formatting, lint, Rust tests, and the stock-GC sample"
     )
     subparsers.add_parser("miri", help="run gc-rust tests under the pinned Miri")
+    matrix_parser = subparsers.add_parser(
+        "matrix", help="run bounded scenarios under both GCs"
+    )
+    matrix_parser.add_argument(
+        "--report-dir",
+        type=Path,
+        metavar="DIRECTORY",
+        help="write each scenario's stdout and stderr to separate files",
+    )
 
     for command in ("build", "smoke"):
         command_parser = subparsers.add_parser(command)
@@ -487,6 +643,8 @@ def main() -> int:
             verify()
         elif arguments.command == "miri":
             miri()
+        elif arguments.command == "matrix":
+            matrix(arguments.report_dir)
         elif arguments.command == "build":
             build(arguments.configuration)
         else:

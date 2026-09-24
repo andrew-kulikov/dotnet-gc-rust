@@ -10,3 +10,8 @@ Planned samples:
 - `FrameWorkload` — deterministic 60 Hz and 120 Hz allocation workloads.
 
 Keep samples deterministic and command-line driven. Each program should print a concise success/failure result, accept a random seed where randomness is useful, and run under both the stock GC and the custom GC. Do not commit runtime binaries, dumps, traces, hostnames, usernames, or machine-specific paths.
+
+`LoaderSmoke` accepts `small`, `large`, `threads`, `pin`, `finalize`, or
+`exhaust` as its sole argument. With no argument it prints the original smoke
+line. Run `python scripts/build.py matrix` for the isolated stock/ZeroGC results
+and the [capability observations](../docs/ZERO_GC_CAPABILITIES.md).

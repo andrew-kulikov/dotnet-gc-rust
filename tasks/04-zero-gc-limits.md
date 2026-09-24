@@ -25,20 +25,20 @@ unexpected crash.
 
 ## Your challenge
 
-- [ ] Add allocation and native-memory counters that reconcile at process exit:
+- [x] Add allocation and native-memory counters that reconcile at process exit:
   requests, successful allocations, requested bytes, owned bytes, and configured
   limit.
-- [ ] Make exhaustion reproducible with a small command-line or environment
+- [x] Make exhaustion reproducible with a small command-line or environment
   limit. It must fail without wraparound, use-after-free, or an access violation.
-- [ ] Add separate bounded scenarios for small allocations, a large object,
+- [x] Add separate bounded scenarios for small allocations, a large object,
   multiple allocating threads, pinning, and finalization registration.
-- [ ] Produce a checked-in capability note or machine-readable table recording
+- [x] Produce a checked-in capability note or machine-readable table recording
   `works`, `unsupported by named method`, or `unexpected defect` for each
   scenario. Do not turn an unsupported feature into a success stub merely to
   improve the table.
-- [ ] Add one diagnostic showing that allocations occupy disjoint native ranges
+- [x] Add one diagnostic showing that allocations occupy disjoint native ranges
   and that no byte-wise forward heap walk is currently possible.
-- [ ] Keep the original minimal smoke green while the exploratory scenarios run
+- [x] Keep the original minimal smoke green while the exploratory scenarios run
   independently.
 
 ## Checkpoint
