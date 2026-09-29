@@ -52,10 +52,10 @@ The C++ shim should contain no collection policy. It exists only because CoreCLR
 
 ## Native-shim toolchain (Windows x64)
 
-The native shim builds against the full source checkout in the shallow `external/dotnet-runtime` submodule, pinned to the .NET 10.0.11 tag at commit `79d0c463f1b55624c874a11585f7e47731e8d675`. The complete runtime tree is kept locally for source navigation, while older Git history is omitted. Initialize it after cloning:
+The native shim builds against the full source checkout in the shallow `external/dotnet-runtime` submodule, pinned to the .NET 10.0.11 tag at commit `79d0c463f1b55624c874a11585f7e47731e8d675`. The complete runtime tree is kept locally for source navigation, while older Git history is omitted. Initialize it once after cloning:
 
 ```console
-python scripts/build.py bootstrap
+git -c core.longpaths=true submodule update --init --depth 1 -- external/dotnet-runtime
 ```
 
 Build the Rust FFI library and C++ shim together:
@@ -139,11 +139,7 @@ the runtime loaded by `LoaderSmoke`.
 
 On Windows x64, install Python 3, Visual Studio with the MSVC x64 build tools,
 and CMake (or use the Visual Studio-bundled CMake) before building the native
-shim. Bootstrap its pinned submodule once:
-
-```powershell
-python scripts/build.py bootstrap
-```
+shim. Initialize the pinned submodule as shown under Native-shim toolchain.
 
 The Windows automation entry point for the repeatable baseline checks is:
 

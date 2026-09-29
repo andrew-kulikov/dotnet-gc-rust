@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bootstrap and build the Windows x64 CoreCLR GC shim."""
+"""Build and check the Windows x64 CoreCLR GC shim."""
 
 from __future__ import annotations
 
@@ -78,84 +78,24 @@ def recorded_submodule_commit() -> str:
     return fields[1]
 
 
-def bootstrap() -> None:
+def check_runtime_submodule() -> None:
     expected_commit = recorded_submodule_commit()
     submodule = REPOSITORY_ROOT / SUBMODULE_PATH
     interface_header = submodule / "src/coreclr/gc/gcinterface.h"
-    vm_source = submodule / "src/coreclr/vm/gcheaputilities.cpp"
-
-    if (submodule / ".git").exists():
-        current_commit = run(
-            ["git", "rev-parse", "HEAD"], cwd=submodule, capture_output=True
-        ).stdout.strip()
-        sparse_checkout = run(
-            ["git", "config", "--bool", "core.sparseCheckout"],
-            cwd=submodule,
-            capture_output=True,
-            check=False,
-        )
-        if (
-            current_commit == expected_commit
-            and sparse_checkout.stdout.strip() != "true"
-            and interface_header.is_file()
-            and vm_source.is_file()
-        ):
-            log(f"dotnet/runtime is already bootstrapped at {expected_commit[:12]}")
-            return
-
-        status = run(
-            ["git", "status", "--porcelain"], cwd=submodule, capture_output=True
-        )
-        if status.stdout.strip():
-            raise RuntimeError(
-                "dotnet/runtime has local changes; refusing to change its checkout"
-            )
-
-    if not (submodule / ".git").exists():
-        run(
-            [
-                "git",
-                "-c",
-                "core.longpaths=true",
-                "submodule",
-                "update",
-                "--init",
-                "--depth",
-                "1",
-                "--",
-                SUBMODULE_PATH.as_posix(),
-            ],
-        )
-
-    run(["git", "config", "core.longpaths", "true"], cwd=submodule)
-    sparse_checkout = run(
-        ["git", "config", "--bool", "core.sparseCheckout"],
-        cwd=submodule,
-        capture_output=True,
-        check=False,
+    update_command = (
+        "git -c core.longpaths=true submodule update --init --depth 1 -- "
+        f"{SUBMODULE_PATH.as_posix()}"
     )
-    if sparse_checkout.stdout.strip() == "true":
-        run(["git", "sparse-checkout", "disable"], cwd=submodule)
-
-    commit_exists = run(
-        ["git", "cat-file", "-e", f"{expected_commit}^{{commit}}"],
-        cwd=submodule,
-        check=False,
-    )
-    if commit_exists.returncode != 0:
-        run(
-            ["git", "fetch", "--depth", "1", "origin", expected_commit],
-            cwd=submodule,
+    if not (submodule / ".git").exists() or not interface_header.is_file():
+        raise RuntimeError(f"CoreCLR source is missing. Run: {update_command}")
+    current_commit = run(
+        ["git", "rev-parse", "HEAD"], cwd=submodule, capture_output=True
+    ).stdout.strip()
+    if current_commit != expected_commit:
+        raise RuntimeError(
+            f"dotnet/runtime is at {current_commit[:12]}, expected "
+            f"{expected_commit[:12]}. Run: {update_command}"
         )
-
-    run(["git", "checkout", "--detach", expected_commit], cwd=submodule)
-
-    if not interface_header.is_file():
-        raise RuntimeError(f"expected CoreCLR header is missing: {interface_header}")
-    if not vm_source.is_file():
-        raise RuntimeError(f"expected CoreCLR VM source is missing: {vm_source}")
-
-    log(f"Bootstrapped dotnet/runtime at {expected_commit[:12]}")
 
 
 def locate_visual_studio() -> Path:
@@ -253,9 +193,9 @@ def select_visual_studio_generator(cmake: Path) -> str:
 
 
 def build(configuration: str) -> Path:
-    bootstrap()
     if os.name != "nt":
         raise RuntimeError("the native shim currently supports Windows only")
+    check_runtime_submodule()
 
     visual_studio = locate_visual_studio()
     cmake = locate_cmake(visual_studio)
@@ -598,7 +538,6 @@ DEFAULT_MATRIX_LIMIT_BYTES = 64 * 1024 * 1024
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    subparsers.add_parser("bootstrap", help="initialize the pinned runtime submodule")
     subparsers.add_parser(
         "verify", help="run formatting, lint, Rust tests, and the stock-GC sample"
     )
@@ -637,9 +576,7 @@ def parse_arguments() -> argparse.Namespace:
 def main() -> int:
     arguments = parse_arguments()
     try:
-        if arguments.command == "bootstrap":
-            bootstrap()
-        elif arguments.command == "verify":
+        if arguments.command == "verify":
             verify()
         elif arguments.command == "miri":
             miri()

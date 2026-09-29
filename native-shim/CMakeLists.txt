@@ -53,7 +53,7 @@ set(
 set(GC_INTERFACE_HEADER "${DOTNET_RUNTIME_ROOT}/src/coreclr/gc/gcinterface.h")
 if(NOT EXISTS "${GC_INTERFACE_HEADER}")
     message(FATAL_ERROR
-        "CoreCLR GC headers are missing. Run: python scripts/build.py bootstrap"
+        "CoreCLR GC headers are missing. Run: git -c core.longpaths=true submodule update --init --depth 1 -- external/dotnet-runtime"
     )
 endif()
 

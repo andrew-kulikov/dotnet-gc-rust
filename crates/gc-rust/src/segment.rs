@@ -116,7 +116,7 @@ pub unsafe extern "C" fn rust_gc_update_frozen_segment(
     allocated: *mut u8,
     committed: *mut u8,
 ) {
-    println!("rust_gc_update_frozen_segment: {:?}", segment);
+    println!("rust_gc_update_frozen_segment({:?}, allocated: {:?}, committed: {:?})", segment, allocated as usize, committed as usize);
 
     if segment.is_null() {
         return;
