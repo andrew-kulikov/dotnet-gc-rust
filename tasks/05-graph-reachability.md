@@ -19,15 +19,15 @@ very deep chain to expose duplicate work or recursive stack growth.
 
 ## Your challenge
 
-- [ ] Model objects as stable logical IDs mapped to lists of outgoing logical
+- [x] Model objects as stable logical IDs mapped to lists of outgoing logical
   IDs. Do not introduce byte offsets or regions.
-- [ ] Accept a root list and return the set of reachable objects.
-- [ ] Replace recursive traversal if the deep-chain test can overflow the Rust
+- [x] Accept a root list and return the set of reachable objects.
+- [x] Replace recursive traversal if the deep-chain test can overflow the Rust
   stack; use an explicit work collection and avoid scanning an object twice.
-- [ ] Reject a root or edge naming a nonexistent object as model corruption.
-- [ ] Report roots visited, unique objects discovered, edges examined, and
+- [x] Reject a root or edge naming a nonexistent object as model corruption.
+- [x] Report roots visited, unique objects discovered, edges examined, and
   maximum pending work.
-- [ ] Test cycles, self-cycles, disconnected components, duplicate roots,
+- [x] Test cycles, self-cycles, disconnected components, duplicate roots,
   duplicate edges, an empty graph, and a deep chain.
 
 ## Checkpoint

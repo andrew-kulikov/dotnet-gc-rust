@@ -3,6 +3,7 @@
 pub mod alloc;
 pub mod core;
 mod gc_heap;
+pub mod graph;
 mod handle_manager;
 mod handle_store;
 pub mod object;
