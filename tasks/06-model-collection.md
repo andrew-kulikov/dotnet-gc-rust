@@ -47,8 +47,8 @@ walkable or become reusable.
 
 ## What this unlocks
 
-Mission 07 can insert handle semantics between marking and reclamation while the
-phase boundary is still easy to inspect.
+Mission 07 expresses the same small graph scenarios in managed code and checks
+them against the model before reading actual runtime objects.
 
 ## Hints
 

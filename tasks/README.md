@@ -39,56 +39,87 @@ Each mission answers these questions:
 
 Hints are not requirements. Read them after making an initial attempt.
 
-## Current sequence
+## Learning sequence
 
-### Phase 1 - reach managed code quickly
+### Phase 1 - observable managed execution
 
 | Mission | Observable result |
 | ---: | --- |
 | [00](00-reproducible-red-baseline.md) | Stock GC succeeds; custom GC fails in one known way |
-| [01](01-loader-boundary.md) | CoreCLR crosses C++ and Rust boundaries before deliberate failure |
-| [02](02-interface-shell.md) | Initialization succeeds; the first unsupported call fails by name |
-| [03](03-zero-gc-hello-world.md) | `LoaderSmoke` reaches `Main` under a deliberately poor ZeroGC |
-| [04](04-zero-gc-limits.md) | Workloads expose and document why ZeroGC cannot become the collector |
+| [01](01-loader-boundary.md) | CoreCLR crosses the C++ and Rust boundaries |
+| [02](02-interface-shell.md) | Initialization succeeds; unsupported calls fail by name |
+| [03](03-zero-gc-hello-world.md) | A bounded managed program reaches Main |
+| [04](04-zero-gc-limits.md) | Workloads expose ZeroGC's capabilities and limits |
 
-### Phase 2 - learn tracing without runtime memory
-
-| Mission | Observable result |
-| ---: | --- |
-| [05](05-graph-reachability.md) | A plain Rust graph reports exactly the reachable objects |
-| [06](06-model-collection.md) | Unreachable graph objects are removed in a complete model cycle |
-| [07](07-model-strong-and-weak-handles.md) | Strong and weak handle ordering is demonstrated in the model |
-
-### Phase 3 - discover heap representation through refactoring
+### Phase 2 - model semantics and real fixture tracing
 
 | Mission | Observable result |
 | ---: | --- |
-| [08](08-single-region-byte-heap.md) | A one-region byte heap can be reconstructed without an allocation list |
-| [09](09-multi-region-typed-arithmetic.md) | A second region forces checked ranges and distinct byte-domain types |
-| [10](10-linear-reuse.md) | Dead records become reusable through the simplest linear search |
-| [11](11-fragmentation-and-free-lists.md) | A measured fragmentation case motivates coalescing and size buckets |
-| [12](12-dependent-handles.md) | A failing handle chain motivates fixed-point processing |
+| [05](05-graph-reachability.md) | A Rust graph reports exactly the reachable objects |
+| [06](06-model-collection.md) | Model marking completes before unreachable entries are removed |
+| [07](07-managed-graph-fixtures.md) | C# and Rust scenarios share independently expected graphs |
+| [08](08-suspension-lifecycle.md) | Diagnostic suspension always has exactly one restart attempt |
+| [09](09-real-object-inspection.md) | Native code reads one supported real object's links |
+| [10](10-fixture-tracing.md) | Real fixture graphs match model reachability from explicit roots |
 
-### Phase 4 - replace the prototype with a real managed heap
-
-These missions are more provisional than phases 1-3. Revise their details when
-earlier experiments invalidate an assumption; preserve only their observable
-outcomes.
+### Phase 3 - runtime diagnostics and authoritative storage
 
 | Mission | Observable result |
 | ---: | --- |
-| [13](13-reserved-managed-heap.md) | ZeroGC's per-object allocation is replaced by one reserved address range |
-| [14](14-allocation-contexts.md) | Managed threads allocate through bounded allocation contexts |
-| [15](15-managed-object-sizing.md) | The collector derives checked sizes for supported managed shapes |
-| [16](16-gcdesc-reference-enumeration.md) | The collector enumerates real outgoing managed references |
-| [17](17-suspension-lifecycle.md) | The runtime can always restart after a collector-requested suspension |
-| [18](18-runtime-roots-and-marking.md) | Runtime roots drive a real mark phase and dead-object diagnosis |
-| [19](19-real-sweep.md) | Dead managed objects become valid walkable free records |
+| [11](11-managed-object-shapes.md) | Sizes and reference slots match supported managed shapes |
+| [12](12-runtime-root-tracing.md) | Runtime-root diagnostics report reachability and coverage |
+| [13](13-reserved-managed-heap.md) | Managed allocation uses owned committed storage |
+| [14](14-managed-heap-walking.md) | The stopped heap is reconstructed from bytes |
+
+### Phase 4 - complete marking and reclamation
+
+| Mission | Observable result |
+| ---: | --- |
+| [15](15-model-strong-and-weak-handles.md) | Model handles demonstrate roots/trace/weak/reclaim ordering |
+| [16](16-runtime-handles.md) | Required native handles participate in runtime diagnostics |
+| [17](17-complete-marking.md) | A complete phase-local mark result establishes sweep eligibility |
+| [18](18-real-sweep.md) | Supported weak clearing and sweep preserve heap walkability |
+| [19](19-allocation-contexts.md) | Thread contexts preserve verified collection while reducing contention |
+
+## Diagnostic and collection boundaries
+
+- Mission 07's declared fixture edges are an independent expectation, not evidence
+  of successful native memory reading.
+- Mission 10 establishes reachability relative to explicit fixture roots.
+- Missions 11-12 expand runtime coverage and explicitly report incomplete passes.
+- Allocation records may validate addresses and aid comparisons; they never
+  establish liveness. Mission 14 makes heap bytes authoritative for inventory.
+- Mission 17 requires complete coverage for the declared runtime workload.
+  Unknown roots, flags, shapes, or handle kinds prevent sweep authorization.
+- Mission 18 mutates weak slots and object bytes only after a complete mark in
+  the same uninterrupted suspension. It does not reuse reclaimed memory.
+- Suspension uses the required allocation-context contracts from mission 08;
+  mission 19 adds the allocation fast path.
+
+Later missions specify observable outcomes. Implement the smallest supported
+workload first and extend it using failing fixtures. Preserve explicit failure
+instead of claiming support that tests do not establish.
+
+## Storage and handle laboratories
+
+These focused experiments are available when a concrete implementation problem
+calls for them. They are not prerequisites for tracing real fixture objects.
+
+| Laboratory | Prerequisites | Observable result |
+| --- | --- | --- |
+| [01: byte heap](labs/01-single-region-byte-heap.md) | Missions 05-06 | A byte walker reconstructs model records |
+| [02: region arithmetic](labs/02-multi-region-typed-arithmetic.md) | Lab 01 | Multiple regions expose and constrain coordinate mistakes |
+| [03: linear reuse](labs/03-linear-reuse.md) | Lab 02 | A dead range becomes walkable and reusable |
+| [04: fragmentation](labs/04-fragmentation-and-free-lists.md) | Lab 03 | Measurements justify coalescing and a rebuildable index |
+| [05: dependent handles](labs/05-dependent-handles.md) | Missions 06 and 15 | Dependent chains converge to the oracle's fixed point |
+
+Use the same observe, implement, verify, and review workflow for laboratories.
+Model record formats and logical handles do not establish native compatibility.
 
 ## Work intentionally not scheduled yet
 
-Runtime handle completeness, interior pointers, frozen segments, finalization,
-real-heap reuse and stabilization, regional collection, remembered sets,
-frame-safe-point integration, and benchmark releases remain project directions,
-not current missions. Add their mission files only after mission 19 passes and
-the implementation reveals the actual constraints they must address.
+Broader runtime handle coverage, interior/frozen cases, finalization and
+resurrection, native free-space reuse, dependent runtime handles, regional
+collection, remembered sets, and benchmark releases require separate missions
+driven by managed fixtures and measurements. Any such feature encountered by a
+current collection must be supported correctly or block that collection.

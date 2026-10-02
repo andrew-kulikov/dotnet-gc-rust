@@ -1,3 +1,5 @@
+//! A graph of logical objects used to model tracing independently of runtime memory.
+
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -12,6 +14,14 @@ pub struct Graph {
 impl Graph {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn objects(&self) -> impl Iterator<Item = ObjectId> + '_ {
+        self.objects.keys().copied()
+    }
+
+    pub fn references(&self, object: ObjectId) -> Option<&[ObjectId]> {
+        self.objects.get(&object).map(Vec::as_slice)
     }
 
     pub fn add_object(&mut self) -> ObjectId {
@@ -43,8 +53,10 @@ pub enum GraphError {
 
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct TraceStats {
+    /// Counts every root entry, including duplicates.
     pub roots_visited: usize,
     pub objects_discovered: usize,
+    /// Counts outgoing references of reachable objects, excluding validation.
     pub edges_examined: usize,
     pub max_pending_work: usize,
 }
@@ -55,6 +67,23 @@ pub struct TraceResult {
     pub stats: TraceStats,
 }
 
+/// Validates the whole graph and computes reachability without changing it.
+///
+/// ```
+/// use gc_rust::graph::{Graph, GraphError, trace};
+///
+/// let mut graph = Graph::new();
+/// let parent = graph.add_object();
+/// let child = graph.add_object();
+/// let detached = graph.add_object();
+/// graph.add_edge(parent, child)?;
+///
+/// let result = trace(&graph, &[parent])?;
+/// assert!(result.reachable.contains(&child));
+/// assert!(!result.reachable.contains(&detached));
+/// assert_eq!(graph.objects().count(), 3);
+/// # Ok::<(), GraphError>(())
+/// ```
 pub fn trace(graph: &Graph, roots: &[ObjectId]) -> Result<TraceResult, GraphError> {
     for &root in roots {
         if !graph.objects.contains_key(&root) {

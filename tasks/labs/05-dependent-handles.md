@@ -1,9 +1,9 @@
-# Mission 12 - Let a handle chain require a fixed point
+# Laboratory 05 - Let a handle chain require a fixed point
 
 ## Where you are
 
-The model has tracing, reclamation, strong/weak handles, and reusable byte
-storage. It has no dependent-handle semantics.
+The graph model from missions 06 and 15 supports tracing, reclamation, and
+strong/weak handles. This laboratory requires no byte heap or native runtime.
 
 ## The problem
 
@@ -45,9 +45,9 @@ addresses, finalization ordering, and concurrency remain future discoveries.
 
 ## What this unlocks
 
-The runtime-independent experiments now cover the core semantic and storage
-mechanisms. Mission 13 can replace ZeroGC's scattered allocations with a real
-reserved address range while keeping the model as a differential oracle.
+The fixed-point oracle can guide a runtime dependent-handle mission when a
+managed fixture demonstrates the need. Native slot lifetimes and callback
+contracts must be validated separately.
 
 ## Hints
 

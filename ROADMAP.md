@@ -34,84 +34,87 @@ formal real-time guarantees are outside the current target.
 
 ### Gate A - observable standalone-GC startup
 
-First prove the loader boundary, then make initialization succeed, then run the
-smallest managed program with an intentionally poor and bounded ZeroGC. This
-early implementation may allocate every object separately and leak until a
-configured limit.
+Missions 00-04 establish the loader boundary, bounded managed execution,
+explicit unsupported behavior, and reconciled allocation diagnostics.
+
+### Gate B - real fixture tracing
+
+Missions 05-10 connect the model to managed execution in small verifiable steps:
+
+- graph reachability and model reclamation match independent expectations;
+- C# fixtures provide known relationships and explicit roots;
+- suspension and restart have an independently tested lifecycle;
+- a supported real object's size and references come from pinned metadata;
+- snapshots of real fixture links match the graph oracle;
+- every supported diagnostic run resumes managed execution.
+
+Fixture-relative reachability never authorizes runtime reclamation.
+
+### Gate C - runtime coverage and heap inventory
+
+Missions 11-14 extend real shape decoding, observe runtime roots, introduce owned
+storage, and establish a full stopped-heap walk.
 
 The gate is complete when:
 
-- stock and custom runs are separately reproducible;
-- `LoaderSmoke` reaches `Main` and exits normally under the custom GC;
-- unsupported operations fail by name rather than returning fake success;
-- the ZeroGC workload and counters make its limitations visible.
+- every claimed shape and root source has an independent managed fixture;
+- unsupported cases produce incomplete analysis without liveness claims;
+- managed allocation remains inside owned committed ranges;
+- heap bytes reconstruct the complete supported inventory without depending on
+  the allocation registry;
+- runtime graph diagnostics survive the storage transition.
 
-### Gate B - collector semantics in a replaceable model
+### Gate D - complete marking and first real sweep
 
-Learn reachability, reclamation ordering, strong/weak/dependent handles, byte
-walking, and free-space reuse without CoreCLR or native pointers. Begin with
-ordinary Rust collections, then replace them with a byte heap only when object
-boundaries become the problem. Add typed byte arithmetic only when multiple
-coordinate systems make `usize` ambiguous.
-
-The gate is complete when:
-
-- generated graph results match an independent oracle;
-- a byte walker reconstructs objects without allocator bookkeeping;
-- dead records remain walkable and reusable;
-- fragmentation workloads justify or reject free-space indexes with data;
-- the FFI-free crate passes normal tests and Miri-compatible tests.
-
-### Gate C - collector-owned managed allocation
-
-Replace ZeroGC's scattered allocations with a reserved, lazily committed address
-range. Start with a slow locked allocator, observe contention, then refactor to
-thread allocation contexts. Derive real object sizes from pinned runtime source
-and decode outgoing reference metadata incrementally from managed fixtures.
+Missions 15-18 specify model handle ordering, implement the required native
+handle contracts, and make trace completeness a prerequisite for mutation.
 
 The gate is complete when:
 
-- managed allocations stay inside owned committed ranges;
-- allocation contexts never overlap and all tails are accounted for;
-- supported objects walk exactly to known frontiers;
-- outgoing references match independent fixture expectations;
-- corrupt metadata fails in bounded time before unsafe traversal.
+- every liveness source required by the declared workload participates;
+- unknown roots, flags, layouts, or handles prevent sweep authorization;
+- complete marking, weak clearing, and sweep run in one suspended window;
+- known-live objects survive and known-dead ranges become valid free records;
+- heap verification and byte accounting succeed before normal execution resumes;
+- recoverable failures preserve exactly one restart attempt; unrecoverable heap
+  corruption follows an explicit terminal policy instead of normal resumption.
 
-### Gate D - first real stop-the-world collection
+This is a supported experimental workload, not general runtime completeness.
+Native freed ranges are not yet reused.
 
-Establish suspension and restart as an independently tested lifecycle. Then add
-runtime roots, real marking, and finally sweep dead objects into valid walkable
-free records. Do not reuse those real free records in the same mission.
+### Gate E - thread allocation contexts
 
-The gate is complete when:
+Mission 19 introduces a fast allocation path while preserving the existing
+walk/mark/sweep invariants. Active tails are closed into valid records during
+suspension, and every context byte is accounted for.
 
-- every tested post-suspend exit attempts restart exactly once;
-- known roots keep known graphs live across repeated mark cycles;
-- known-dead objects become valid free records;
-- the heap verifies and byte accounting reconciles after every sweep;
-- stress behavior does not depend on diagnostic logging.
+## Focused model laboratories
+
+The laboratories listed in [tasks/README.md](tasks/README.md) explore byte
+records, typed region arithmetic, reuse, fragmentation, and dependent handles
+when a concrete problem requires them. They provide independent oracles for
+native work without blocking early real-object tracing.
 
 ## Future direction - intentionally unscheduled
 
-Create the next mission batch only after Gate D passes. Use actual failures and
-measurements to choose the order among:
+Create additional missions from observed runtime failures and measurements:
 
-- strong and pinned runtime handles;
-- short/long weak and dependent runtime handles;
-- interior pointers and object-start indexing;
-- frozen segments;
+- broader strong, pinned, weak, and dependent handle coverage;
+- interior pointers, frozen segments, and object-start indexing;
 - finalization, resurrection, critical finalizers, and sync-block weak state;
-- real-heap split/coalesce/reuse and bounded-memory stabilization;
+- native split/coalesce/reuse and bounded-memory stabilization;
 - low-memory, failure-injection, and long soak validation;
 - regional victim selection and partial-collection correctness;
 - remembered sets and write-barrier integration;
 - managed frame-safe-point control and emergency fallback;
 - reproducible pause, throughput, memory, and fragmentation evaluation.
 
+A missing runtime capability blocks collection whenever the workload encounters
+it. Scheduling its general support later never permits an incomplete sweep.
+
 The regional experiment remains a hypothesis: trading memory and bookkeeping
 for tighter tail pauses may or may not help the defined workload. A negative
-measured result is acceptable; a collector with an unverified root or heap
-invariant is not.
+measured result is acceptable; unverified root or heap invariants are not.
 
 ## Decisions deliberately postponed
 

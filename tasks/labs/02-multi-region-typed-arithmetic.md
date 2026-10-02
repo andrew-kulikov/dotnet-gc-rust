@@ -1,4 +1,4 @@
-# Mission 09 - Let a second region break ambiguous arithmetic
+# Laboratory 02 - Let a second region break ambiguous arithmetic
 
 ## Where you are
 
@@ -30,7 +30,7 @@ region-relative offset can be mistaken for an arena-relative offset.
   walked record from crossing its owning region.
 - [ ] Store long-lived metadata as IDs and offsets, not slices or pointers into a
   growable byte buffer.
-- [ ] Keep all mission 08 allocation, walking, corruption, and marking tests
+- [ ] Keep all laboratory 01 allocation, walking, corruption, and marking tests
   working across region boundaries.
 
 ## Checkpoint
@@ -49,12 +49,12 @@ pass.
 
 ## Known debt
 
-Model offsets are not native pointers. The future Windows heap may reuse range
-logic, but it must not pretend Rust offsets and CoreCLR addresses are identical.
+Model offsets are not native pointers. Native heap experiments may reuse range
+logic, but must keep Rust offsets and CoreCLR addresses distinct.
 
 ## What this unlocks
 
-Mission 10 can rewrite dead byte records without risking accidental overlap with
+Laboratory 03 can rewrite dead byte records without risking accidental overlap with
 a neighboring region.
 
 ## Hints

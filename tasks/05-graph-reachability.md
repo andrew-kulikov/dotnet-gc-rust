@@ -36,6 +36,11 @@ Randomly generated valid graphs produce the same reachable set as a deliberately
 simple independent BFS/DFS oracle. Corrupt graphs return an error rather than a
 partial success.
 
+Run the checkpoint with `cargo test -p gc-rust`. For a standalone example of
+building and inspecting the graph, run
+`cargo run -p gc-rust --example graph_reachability`;
+see [the example notes](../crates/gc-rust/examples/README.md).
+
 ## Allowed shortcuts
 
 - `HashMap`, `HashSet`, and `Vec` are encouraged.

@@ -39,7 +39,7 @@ Runtime-independent mechanisms:
 - Collector policies.
 - Metrics and invariant verification.
 
-The first version should use a byte-backed simulated heap, not native addresses. This allows Miri, property tests, deterministic fault injection, and a simple reference implementation.
+Begin with a graph of logical object IDs as an independent reachability oracle. Connect it to bounded snapshots of real managed fixtures during verified suspension. Use byte-backed model experiments when storage, walking, or reuse creates a concrete problem; their record layout remains independent of CoreCLR metadata.
 
 ### `gc-rust::platform`
 

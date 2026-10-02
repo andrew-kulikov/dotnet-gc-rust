@@ -1,64 +1,55 @@
-# Mission 13 - Replace scattered ZeroGC allocations
+# Mission 13 - Allocate managed objects in owned storage
 
 ## Where you are
 
-The managed sample runs through a bounded per-object ZeroGC. Separately, the
-Rust model demonstrates checked regions, walking, tracing, sweep, and reuse.
+Suspended diagnostics already trace supported real objects and report root
+coverage. ZeroGC still owns a separate native block for each allocation.
 
 ## The problem
 
-ZeroGC allocations occupy unrelated native ranges and cannot be walked as one
-managed heap. Move to a collector-owned reservation, but keep allocation slow
-and simple so the native-memory lifetime is understood before adding thread
-allocation contexts.
+A collector-owned range makes full byte walking and eventual reclamation
+possible. Allocation policy should stay simple while storage ownership changes.
 
 ## Observe first
 
-Record ZeroGC's allocation ranges and current managed-address/write-barrier
-configuration. Write a small platform experiment that reserves more address
-space than it commits, touches only committed pages, decommits them, and commits
-them again.
+Record the current fixture trace results, native ranges, and write-barrier
+configuration. Exercise Windows reserve, commit, decommit, and release separately.
 
 ## Your challenge
 
-- [ ] Add an owning Windows reservation that distinguishes reserve, commit,
-  decommit, and release and preserves native error codes.
-- [ ] Validate page-aligned subranges with checked arithmetic and release exactly
-  the owned reservation on drop without panicking.
-- [ ] Keep the platform API injectable so range and allocation policy tests do
-  not require Windows calls.
-- [ ] Replace per-object native allocation with a simple locked bump frontier in
-  committed portions of the reservation. Commit more pages on demand.
+- [ ] Add an owning reservation with checked page-aligned subranges and native
+  error reporting; release exactly the owned range without panicking.
+- [ ] Keep platform calls injectable for range and failure tests.
+- [ ] Allocate through a simple locked bump frontier, committing pages on demand.
 - [ ] Publish correct managed bounds and write-barrier/card state for the pinned
-  runtime; reject uncertainty rather than neutralizing the barrier silently.
-- [ ] Keep the mission 03 smoke and mission 04 bounded exhaustion scenario
-  deterministic, with reserved and committed byte counters.
-- [ ] Test invalid ranges, reserve/commit failure injection, guard pages, and
-  release after partial initialization.
+  runtime; validate all barrier paths used by the managed fixtures.
+- [ ] Preserve the suspension, required allocation-context callbacks, and root
+  handoff contracts while keeping allocation on a correct slow path.
+- [ ] Run the managed graph and runtime-root diagnostics against the new ranges.
+- [ ] Preserve bounded exhaustion and reconcile reserved, committed, and owned
+  bytes through partial initialization and failure.
 
 ## Checkpoint
 
-`LoaderSmoke` still exits normally under the custom GC, every returned object is
-aligned inside an owned committed range, committed-byte accounting reconciles,
-and the configured limit fails without memory corruption.
+Managed fixtures resume with the same observed graphs and declared root
+coverage. Every allocation lies in an aligned committed owned range; limits and
+injected reserve/commit failures terminate without memory corruption.
 
 ## Allowed shortcuts
 
-- All allocation may use one global lock and one active range.
-- Collection and real heap walking are not required.
-- The native layout does not need to reuse the model's teaching headers.
+- One reservation, one active range, and a global allocation lock are sufficient.
+- Per-thread fast allocation and collection are not required.
+- Allocation records may support diagnostics until byte walking is established.
 
 ## Known debt
 
-Contention is expected, abandoned allocation tails are not yet walkable managed
-free objects, and object boundaries still cannot be reconstructed reliably.
+The stopped heap cannot yet be reconstructed without allocation bookkeeping.
+Owned storage alone does not make an incomplete trace safe for reclamation.
 
 ## What this unlocks
 
-Mission 14 can measure global-allocation contention and introduce allocation
-contexts as a focused allocator refactor.
+Mission 14 verifies object boundaries across the entire stopped allocated range.
 
 ## Hints
 
-Avoid creating long-lived Rust slices across partially committed memory. State
-explicitly whether the reservation owner is `Send` or `Sync` and why.
+State the reservation owner's lifetime and thread-safety rules explicitly.

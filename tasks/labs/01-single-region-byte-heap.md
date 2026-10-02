@@ -1,9 +1,10 @@
-# Mission 08 - Reconstruct a one-region byte heap
+# Laboratory 01 - Reconstruct a one-region byte heap
 
 ## Where you are
 
-Reachability and basic handle semantics work with ordinary Rust collections.
-The model still gets object boundaries for free from `HashMap` entries.
+The graph model from missions 05-06 supports tracing and reclamation. This
+laboratory explores byte representation before implementing a storage or reuse
+policy. Object boundaries currently come from `HashMap` entries.
 
 ## The problem
 
@@ -21,7 +22,7 @@ then prove a walker can reproduce it without reading that list.
 ## Your challenge
 
 - [ ] Add one fixed-size `Vec<u8>` arena and one bump cursor. Plain `usize`
-  positions are acceptable in this mission.
+  positions are acceptable in this laboratory.
 - [ ] Define a teaching object header with an encoded total size and a model
   layout identifier. Keep it unrelated to CoreCLR's real layout.
 - [ ] Allocate an aligned record only when its checked end fits; a failed request
@@ -52,7 +53,7 @@ only one coordinate system. Space cannot be reused.
 
 ## What this unlocks
 
-Mission 09 adds a second coordinate system. The resulting ambiguity supplies the
+Laboratory 02 adds a second coordinate system. The resulting ambiguity supplies the
 reason to introduce region IDs, offsets, sizes, alignments, and checked ranges.
 
 ## Hints

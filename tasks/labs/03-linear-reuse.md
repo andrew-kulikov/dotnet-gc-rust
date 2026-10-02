@@ -1,4 +1,4 @@
-# Mission 10 - Reuse one dead byte range
+# Laboratory 03 - Reuse one dead byte range
 
 ## Where you are
 
@@ -50,7 +50,7 @@ fail a request that their combined space could satisfy.
 
 ## What this unlocks
 
-Mission 11 can measure those two limitations and introduce coalescing or size
+Laboratory 04 can measure those two limitations and introduce coalescing or size
 buckets only where the workload demonstrates value.
 
 ## Hints

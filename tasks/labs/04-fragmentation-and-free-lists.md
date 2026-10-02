@@ -1,4 +1,4 @@
-# Mission 11 - Make fragmentation choose the next data structure
+# Laboratory 04 - Make fragmentation choose the next data structure
 
 ## Where you are
 
@@ -53,9 +53,8 @@ synchronization and allocation contexts may change the useful indexing policy.
 
 ## What this unlocks
 
-The model now separates authoritative heap representation from replaceable
-allocation policy. Mission 12 can complete dependent-handle semantics before the
-project returns to native memory.
+The measured policy and independent verifier can inform a native reuse mission
+once that mission establishes CoreCLR free-object and synchronization contracts.
 
 ## Hints
 
