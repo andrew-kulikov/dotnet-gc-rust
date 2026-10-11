@@ -42,6 +42,113 @@ impl Graph {
         self.objects.get_mut(&source).unwrap().push(target);
         Ok(())
     }
+
+    /// Borrows the graph exclusively until collection finishes or is abandoned.
+    ///
+    /// Allocation, mutation, and a second collection cannot overlap this borrow:
+    ///
+    /// ```compile_fail
+    /// use gc_rust::graph::Graph;
+    /// let mut graph = Graph::new();
+    /// let marking = graph.begin_collection();
+    /// graph.add_object();
+    /// marking.mark(&[]).unwrap().sweep();
+    /// ```
+    ///
+    /// ```compile_fail
+    /// use gc_rust::graph::Graph;
+    /// let mut graph = Graph::new();
+    /// let root = graph.add_object();
+    /// let marked = graph.begin_collection().mark(&[root]).unwrap();
+    /// graph.add_edge(root, root).unwrap();
+    /// marked.sweep();
+    /// ```
+    ///
+    /// ```compile_fail
+    /// use gc_rust::graph::Graph;
+    /// let mut graph = Graph::new();
+    /// let marking = graph.begin_collection();
+    /// graph.begin_collection().mark(&[]).unwrap().sweep();
+    /// marking.mark(&[]).unwrap().sweep();
+    /// ```
+    pub fn begin_collection(&mut self) -> Marking<'_> {
+        Marking { graph: self }
+    }
+
+    /// Marks completely, then removes unreachable objects. Errors leave the graph unchanged.
+    pub fn collect(&mut self, roots: &[ObjectId]) -> Result<CollectionStats, GraphError> {
+        Ok(self.begin_collection().mark(roots)?.sweep())
+    }
+}
+
+/// A collection that has not yet established a complete live set.
+///
+/// Dropping this phase cancels collection without changing the graph.
+/// Sweep is unavailable until marking succeeds:
+///
+/// ```compile_fail
+/// use gc_rust::graph::Graph;
+/// Graph::new().begin_collection().sweep();
+/// ```
+pub struct Marking<'a> {
+    graph: &'a mut Graph,
+}
+
+impl<'a> Marking<'a> {
+    /// Validates and traces without mutation. On error, releases the unchanged graph.
+    pub fn mark(self, roots: &[ObjectId]) -> Result<Marked<'a>, GraphError> {
+        let result = trace(self.graph, roots)?;
+        Ok(Marked {
+            graph: self.graph,
+            result,
+        })
+    }
+}
+
+/// A complete live set tied to the graph it was traced from.
+///
+/// Dropping this phase abandons the result without reclaiming anything.
+/// Sweeping consumes it, so the same result cannot be applied twice:
+///
+/// ```compile_fail
+/// use gc_rust::graph::Graph;
+/// let mut graph = Graph::new();
+/// let marked = graph.begin_collection().mark(&[]).unwrap();
+/// marked.sweep();
+/// marked.sweep();
+/// ```
+pub struct Marked<'a> {
+    graph: &'a mut Graph,
+    result: TraceResult,
+}
+
+impl Marked<'_> {
+    pub fn trace_result(&self) -> &TraceResult {
+        &self.result
+    }
+
+    pub fn sweep(self) -> CollectionStats {
+        let allocated_before = self.graph.objects.len();
+        self.graph
+            .objects
+            .retain(|object, _| self.result.reachable.contains(object));
+        let allocated_after = self.graph.objects.len();
+        CollectionStats {
+            allocated_before,
+            live: self.result.reachable.len(),
+            reclaimed: allocated_before - allocated_after,
+            allocated_after,
+        }
+    }
+}
+
+/// Object counts, not byte counts: before = live + reclaimed, after = live.
+#[derive(Debug, Eq, PartialEq)]
+pub struct CollectionStats {
+    pub allocated_before: usize,
+    pub live: usize,
+    pub reclaimed: usize,
+    pub allocated_after: usize,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -264,6 +371,180 @@ mod tests {
         }
 
         visited
+    }
+
+    #[test]
+    fn marks_before_sweeping_and_preserves_reachable_cycles() {
+        for link_cycles in [false, true] {
+            let mut graph = build_graph(&[(0, &[1]), (1, &[0]), (2, &[3]), (3, &[2])]);
+            if link_cycles {
+                graph.add_edge(id(1), id(2)).unwrap();
+            }
+            let before = graph.objects.clone();
+            let marked = graph.begin_collection().mark(&[id(0), id(0)]).unwrap();
+            let expected = if link_cycles {
+                HashSet::from([id(0), id(1), id(2), id(3)])
+            } else {
+                HashSet::from([id(0), id(1)])
+            };
+
+            assert_eq!(marked.trace_result().reachable, expected);
+            assert_eq!(marked.graph.objects, before);
+            assert_eq!(
+                marked.sweep(),
+                CollectionStats {
+                    allocated_before: 4,
+                    live: expected.len(),
+                    reclaimed: 4 - expected.len(),
+                    allocated_after: expected.len(),
+                }
+            );
+            assert_eq!(graph.objects().collect::<HashSet<_>>(), expected);
+            for object in expected {
+                assert_eq!(graph.references(object), Some(before[&object].as_slice()));
+            }
+            assert_eq!(graph.add_object(), id(4));
+        }
+    }
+
+    #[test]
+    fn collects_all_dead_and_already_empty_graphs_without_reusing_ids() {
+        let mut graph = build_graph(&[(0, &[1]), (1, &[0])]);
+        assert_eq!(
+            graph.collect(&[]).unwrap(),
+            CollectionStats {
+                allocated_before: 2,
+                live: 0,
+                reclaimed: 2,
+                allocated_after: 0,
+            }
+        );
+        assert_eq!(
+            graph.collect(&[]).unwrap(),
+            CollectionStats {
+                allocated_before: 0,
+                live: 0,
+                reclaimed: 0,
+                allocated_after: 0,
+            }
+        );
+        assert_eq!(graph.add_object(), id(2));
+        assert_eq!(graph.collect(&[id(0)]), Err(GraphError::MissingRoot(id(0))));
+        assert!(graph.references(id(2)).is_some());
+    }
+
+    #[test]
+    fn failed_marking_preserves_the_entire_graph_and_releases_the_borrow() {
+        let mut graph = build_graph(&[(0, &[]), (1, &[])]);
+        let before = graph.objects.clone();
+        assert_eq!(
+            graph.collect(&[id(99)]),
+            Err(GraphError::MissingRoot(id(99)))
+        );
+        assert_eq!(graph.objects, before);
+
+        // Inject corruption that the public mutation API normally prevents.
+        graph.objects.get_mut(&id(1)).unwrap().push(id(99));
+        let before = graph.objects.clone();
+        let next_id = graph.next_id;
+        for _ in 0..2 {
+            assert_eq!(
+                graph.collect(&[id(0)]),
+                Err(GraphError::MissingTarget {
+                    source: id(1),
+                    target: id(99),
+                })
+            );
+            assert_eq!(graph.objects, before);
+            assert_eq!(graph.next_id, next_id);
+        }
+        assert_eq!(graph.add_object(), id(next_id));
+        graph.add_edge(id(0), id(next_id)).unwrap();
+    }
+
+    #[test]
+    fn abandoning_either_phase_leaves_the_graph_unchanged() {
+        let mut graph = build_graph(&[(0, &[]), (1, &[1])]);
+        let before = graph.objects.clone();
+        {
+            let _marking = graph.begin_collection();
+        }
+        assert_eq!(graph.objects, before);
+        {
+            let marked = graph.begin_collection().mark(&[id(0)]).unwrap();
+            assert_eq!(marked.trace_result().reachable, HashSet::from([id(0)]));
+        }
+        assert_eq!(graph.objects, before);
+        assert_eq!(graph.add_object(), id(2));
+        assert_eq!(graph.collect(&[id(0)]).unwrap().reclaimed, 2);
+    }
+
+    #[test]
+    fn generated_allocate_link_collect_sequences_match_a_reference_model() {
+        for seed in 0..32_u64 {
+            let mut state = seed;
+            let mut next = || {
+                state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+                state >> 32
+            };
+            let mut graph = Graph::new();
+            let mut model = HashMap::<u64, Vec<u64>>::new();
+            let mut next_id = 0;
+
+            for _ in 0..100 {
+                for _ in 0..next() % 5 {
+                    assert_eq!(graph.add_object(), id(next_id));
+                    model.insert(next_id, Vec::new());
+                    next_id += 1;
+                }
+                let mut objects: Vec<_> = model.keys().copied().collect();
+                objects.sort_unstable();
+                if !objects.is_empty() {
+                    for _ in 0..next() % 8 {
+                        let source = objects[next() as usize % objects.len()];
+                        let target = objects[next() as usize % objects.len()];
+                        graph.add_edge(id(source), id(target)).unwrap();
+                        model.get_mut(&source).unwrap().push(target);
+                    }
+                }
+                let roots: Vec<_> = (0..next() % 5)
+                    .filter(|_| !objects.is_empty())
+                    .map(|_| objects[next() as usize % objects.len()])
+                    .collect();
+
+                // Independent oracle: repeated whole-map scans to a fixed point,
+                // with no DFS worklist or calls into the production tracer.
+                let mut live: HashSet<_> = roots.iter().copied().collect();
+                loop {
+                    let previous_count = live.len();
+                    for (&source, targets) in &model {
+                        if live.contains(&source) {
+                            live.extend(targets);
+                        }
+                    }
+                    if live.len() == previous_count {
+                        break;
+                    }
+                }
+                let before = model.len();
+                model.retain(|object, _| live.contains(object));
+                let roots: Vec<_> = roots.into_iter().map(id).collect();
+                assert_eq!(
+                    graph.collect(&roots).unwrap(),
+                    CollectionStats {
+                        allocated_before: before,
+                        live: live.len(),
+                        reclaimed: before - live.len(),
+                        allocated_after: live.len(),
+                    }
+                );
+                assert_eq!(graph.objects().count(), model.len());
+                for (&object, targets) in &model {
+                    let expected: Vec<_> = targets.iter().copied().map(id).collect();
+                    assert_eq!(graph.references(id(object)), Some(expected.as_slice()));
+                }
+            }
+        }
     }
 
     #[test]

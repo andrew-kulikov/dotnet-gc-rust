@@ -19,21 +19,35 @@ which mutation order would make that prediction unreliable.
 
 ## Your challenge
 
-- [ ] Introduce explicit model phases sufficient to prevent allocation or graph
+- [x] Introduce explicit model phases sufficient to prevent allocation or graph
   mutation through safe APIs while collection is in progress.
-- [ ] Run reachability without deleting objects, then reclaim every object not
+- [x] Run reachability without deleting objects, then reclaim every object not
   in the completed live set.
-- [ ] Return allocated-before, live, reclaimed, and allocated-after counts and
+- [x] Return allocated-before, live, reclaimed, and allocated-after counts and
   make them reconcile.
-- [ ] Leave the model in an allocatable state after success and in a defined,
+- [x] Leave the model in an allocatable state after success and in a defined,
   inspectable state after a detected corruption.
-- [ ] Test repeated allocate/collect sequences, all-live, all-dead, dead cycles,
+- [x] Test repeated allocate/collect sequences, all-live, all-dead, dead cycles,
   and collection of an already empty graph.
 
 ## Checkpoint
 
 Generated sequences match a simple reference model after every complete
 collection, and invalid phase transitions are rejected by the public API.
+
+Run `cargo test -p gc-rust` for the runtime and compile-fail checks. Run
+`cargo run -p gc-rust --example graph_collection` for an observable collection:
+the first sweep reports `before=4, live=2, reclaimed=2, after=2`; allocation
+resumes, then collecting with no roots reports `before=3, live=0, reclaimed=3,
+after=0`. See [the example notes](../crates/gc-rust/examples/README.md).
+
+The implementation uses borrowed `Marking` and `Marked` phases. The compiler
+rejects allocation, edge mutation, or a second collection overlapping the
+exclusive borrow, sweep before successful marking, and reuse of a swept result.
+Dropping either phase cancels without mutation. Marking errors release an
+unchanged, inspectable graph; corruption is preserved and still rejected on
+the next attempt. Thirty-two generated sequences each check 100 collections
+against a separately stored, fixed-point reference model.
 
 ## Allowed shortcuts
 
