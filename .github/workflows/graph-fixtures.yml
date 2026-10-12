@@ -12,6 +12,7 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 20
     steps:
+      - run: git config --global core.longpaths true
       - uses: actions/checkout@v4
         with:
           submodules: true
