@@ -83,7 +83,7 @@ def check(stock_only: bool) -> None:
     for collector, env in collectors:
         for name, edges, roots, live in scenarios:
             result = subprocess.run(
-                ["dotnet", str(sample), str(fixture), name],
+                ["dotnet", str(sample), name, edges, roots, live],
                 cwd=REPOSITORY_ROOT, env=env, capture_output=True, text=True, timeout=30,
             )
             for stream in ("stdout", "stderr"):

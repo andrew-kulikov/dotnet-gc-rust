@@ -25,6 +25,8 @@ explicit root labels (duplicates allowed), and sorted expected live labels.
 A dash means a null `Next`, no roots, or an empty live set. Labels are sidecar
 metadata independent of addresses. The runner bounds the input to 16 scenarios,
 16 nodes per scenario, and 16 roots before managed construction.
+It passes one parsed row as command-line arguments to each managed process;
+the managed fixture needs no file I/O or file-handle/finalization machinery.
 
 | Scenario | Links | Explicit roots | Expected live labels |
 | --- | --- | --- | --- |

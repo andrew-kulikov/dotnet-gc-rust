@@ -1,23 +1,19 @@
 using System.Runtime.CompilerServices;
 
-if (args.Length != 2)
-    throw new ArgumentException("Expected a fixture file and a scenario name.");
+if (args.Length != 4)
+    throw new ArgumentException("Expected a scenario name, edges, roots, and live labels.");
 
-var fields = File.ReadLines(args[0])
-    .Where(line => !line.StartsWith('#') && !string.IsNullOrWhiteSpace(line))
-    .Select(line => line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
-    .Single(fields => fields[0] == args[1]);
-var links = fields[1].Split(',').Select(link => link.Split(':')).ToArray();
+var links = args[1].Split(',').Select(link => link.Split(':')).ToArray();
 var labels = links.Select(link => link[0]).ToArray();
 var nodes = labels.Select(_ => new Node()).ToArray();
 Node Resolve(string label) => nodes[Array.IndexOf(labels, label)];
 for (int i = 0; i < nodes.Length; i++)
     nodes[i].Next = links[i][1] == "-" ? null : Resolve(links[i][1]);
-var roots = fields[2] == "-" ? [] : fields[2].Split(',').Select(Resolve).ToArray();
+var roots = args[2] == "-" ? [] : args[2].Split(',').Select(Resolve).ToArray();
 
-Console.WriteLine($"fixture {args[1]} constructed");
-Observe(args[1], labels, nodes, roots, fields[3]);
-Console.WriteLine($"fixture {args[1]} continuation");
+Console.WriteLine($"fixture {args[0]} constructed");
+Observe(args[0], labels, nodes, roots, args[3]);
+Console.WriteLine($"fixture {args[0]} continuation");
 GC.KeepAlive(roots);
 GC.KeepAlive(nodes);
 
