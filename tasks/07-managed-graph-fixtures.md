@@ -34,6 +34,15 @@ One reproducible command checks fixture construction and Rust-model results
 for chains, cycles, disconnected components, duplicate roots, and null fields.
 The managed program reaches a continuation marker after each supported run.
 
+Run `python scripts/graph_fixtures.py` on Windows x64 for the complete
+Rust/stock-GC/ZeroGC checkpoint. The command checks six shared scenarios,
+including an empty explicit root set, and records per-process logs under
+`out/graph-fixtures/`. The `Graph fixtures` pull-request workflow runs it too.
+`--stock-only` explicitly selects the partial checkpoint on other platforms;
+it does not establish ZeroGC support. See
+[the fixture notes](../samples/GraphFixtures/README.md) for the data format,
+markers, limitations, and pinned-runtime handoff contract.
+
 ## Allowed shortcuts
 
 - Fixture descriptions may be small checked-in data files.

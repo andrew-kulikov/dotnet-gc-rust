@@ -265,7 +265,9 @@ def clean_stock_gc_environment() -> dict[str, str]:
     """Return the environment used by managed checks that must use the stock GC."""
     environment = os.environ.copy()
     for key in list(environment):
-        if key.casefold() in {"dotnet_gcpath", "dotnet_gcname"}:
+        if key.casefold() in {
+            "dotnet_gcpath", "dotnet_gcname", "complus_gcpath", "complus_gcname"
+        }:
             del environment[key]
     return environment
 

@@ -1,0 +1,7 @@
+# name          label:next (a dash means null)   roots   expected-live
+chain           A:B,B:C,C:-                      A       A,B,C
+cycle           A:B,B:C,C:A                      A       A,B,C
+disconnected    A:B,B:-,C:D,D:C                  A       A,B
+duplicate-roots A:B,B:-                          A,A     A,B
+null-fields     A:-,B:-                          A       A
+no-roots        A:B,B:A                          -       -

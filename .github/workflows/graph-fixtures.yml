@@ -1,0 +1,30 @@
+name: Graph fixtures
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: python scripts/build.py verify
+      - run: python scripts/graph_fixtures.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: graph-fixture-logs
+          path: out/graph-fixtures/
