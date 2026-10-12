@@ -45,6 +45,12 @@ but equally reachable graph cannot pass. Rust builds the same logical graph
 using `Graph`, checks marking against the oracle, then sweeps.
 No collector implementation or external parsing package is added.
 
+The Windows run exposed an unrelated dependency in transcript formatting:
+the multi-part interpolated string handler rents/returns an `ArrayPool<char>`
+buffer, whose thread-local tracking uses `ConditionalWeakTable` and reaches
+ZeroGC's unsupported `CreateDependentHandle`. The graph record uses a direct
+`string.Join` instead; dependent runtime handles remain outside this mission.
+
 Ordered markers: `constructed`, `observation declared-only
 raw-handoff=unsupported`, the `graph` record, and `continuation`.
 The observation marker is a capability statement, not a native operation.

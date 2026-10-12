@@ -34,7 +34,9 @@ static void Observe(string name, string[] labels, Node[] nodes, Node[] roots, st
         throw new InvalidOperationException($"Expected {expected}, observed {live}.");
 
     Console.WriteLine($"fixture {name} observation declared-only raw-handoff=unsupported");
-    Console.WriteLine($"graph {name} {edges} {rootLabels} {live}");
+    // Interpolated handlers use ArrayPool/ConditionalWeakTable on this runtime;
+    // ZeroGC does not implement the dependent handles needed by that path.
+    Console.WriteLine(string.Join(' ', "graph", name, edges, rootLabels, live));
     GC.KeepAlive(roots);
     GC.KeepAlive(nodes);
 }
