@@ -72,6 +72,9 @@ python scripts/build.py smoke
 
 The script uses only the Python standard library. The current shim itself remains Windows x64 only.
 
+See [scripts/README.md](scripts/README.md) for the command layout and shared
+helpers for tasks and labs.
+
 ## Quality bar
 
 Every milestone should leave the repository in a runnable state. The project will use:

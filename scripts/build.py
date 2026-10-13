@@ -1,551 +1,39 @@
 #!/usr/bin/env python3
 """Build and check the Windows x64 CoreCLR GC shim."""
 
-from __future__ import annotations
-
 import argparse
-import os
 from pathlib import Path
-import re
-import shlex
-import shutil
 import subprocess
-import sys
 
-
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-SUBMODULE_PATH = Path("external/dotnet-runtime")
-LOADER_DIAGNOSTIC = "dotnet-gc-rust: native shim reached Rust"
-INTERFACE_SHELL_DIAGNOSTIC = (
-    "dotnet-gc-rust: unimplemented method called:"
-)
-SERVER_GC_DIAGNOSTIC = (
-    "dotnet-gc-rust: unsupported configuration: Server GC is enabled; "
-    "only workstation GC is supported"
-)
-LOADER_SMOKE_OUTPUT = "Hello, World!"
-SCENARIOS = ("smoke", "small", "large", "threads", "pin", "finalize", "exhaust")
-UNSUPPORTED_METHODS = {
-    "large": "GetLOHThreshold",
-    "threads": "FixAllocContext",
-    "finalize": "RegisterForFinalization",
-}
-EXHAUST_LIMIT_BYTES = 1024 * 1024
-MIRI_TOOLCHAIN = "nightly-2026-08-17"
-SYMBOL_CACHE = Path(r"D:\\temp\\symbol-cache")
-MICROSOFT_SYMBOL_SERVER = "https://msdl.microsoft.com/download/symbols"
-
-
-def log(message: str, is_error: bool = False) -> None:
-    file = sys.stderr if is_error else sys.stdout
-    print(f"build-py: {message}", flush=True, file=file)
-
-
-def display_command(command: list[str]) -> str:
-    if os.name == "nt":
-        return subprocess.list2cmdline(command)
-    return shlex.join(command)
-
-
-def run(
-    command: list[str],
-    *,
-    cwd: Path = REPOSITORY_ROOT,
-    env: dict[str, str] | None = None,
-    capture_output: bool = False,
-    check: bool = True,
-) -> subprocess.CompletedProcess[str]:
-    # change color to green for the command, then reset to default color for the output
-    log(f"\033[32m{display_command(command)}\033[0m\n")
-    return subprocess.run(
-        command,
-        cwd=cwd,
-        env=env,
-        capture_output=capture_output,
-        check=check,
-        text=True,
-    )
-
-
-def recorded_submodule_commit() -> str:
-    result = run(
-        ["git", "ls-files", "--stage", "--", SUBMODULE_PATH.as_posix()],
-        capture_output=True,
-    )
-    fields = result.stdout.split()
-    if len(fields) < 2 or fields[0] != "160000":
-        raise RuntimeError(f"{SUBMODULE_PATH} is not recorded as a Git submodule")
-    return fields[1]
-
-
-def check_runtime_submodule() -> None:
-    expected_commit = recorded_submodule_commit()
-    submodule = REPOSITORY_ROOT / SUBMODULE_PATH
-    interface_header = submodule / "src/coreclr/gc/gcinterface.h"
-    update_command = (
-        "git -c core.longpaths=true submodule update --init --depth 1 -- "
-        f"{SUBMODULE_PATH.as_posix()}"
-    )
-    if not (submodule / ".git").exists() or not interface_header.is_file():
-        raise RuntimeError(f"CoreCLR source is missing. Run: {update_command}")
-    current_commit = run(
-        ["git", "rev-parse", "HEAD"], cwd=submodule, capture_output=True
-    ).stdout.strip()
-    if current_commit != expected_commit:
-        raise RuntimeError(
-            f"dotnet/runtime is at {current_commit[:12]}, expected "
-            f"{expected_commit[:12]}. Run: {update_command}"
-        )
-
-
-def locate_visual_studio() -> Path:
-    candidates: list[Path] = []
-    vswhere = shutil.which("vswhere.exe")
-    if vswhere is None:
-        installer = Path(os.environ.get("ProgramFiles(x86)", ""))
-        if installer:
-            candidate = installer / "Microsoft Visual Studio/Installer/vswhere.exe"
-            if candidate.is_file():
-                vswhere = str(candidate)
-
-    if vswhere is not None:
-        result = run(
-            [
-                vswhere,
-                "-latest",
-                "-products",
-                "*",
-                "-requires",
-                "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
-                "-property",
-                "installationPath",
-            ],
-            capture_output=True,
-        )
-        installation = result.stdout.strip()
-        if installation:
-            candidates.append(Path(installation))
-
-    for variable in ("ProgramFiles", "ProgramFiles(x86)"):
-        root_text = os.environ.get(variable)
-        if not root_text:
-            continue
-        visual_studio_root = Path(root_text) / "Microsoft Visual Studio"
-        candidates.extend(sorted(visual_studio_root.glob("*/*"), reverse=True))
-
-    for candidate in candidates:
-        if (candidate / "VC/Tools/MSVC").is_dir():
-            return candidate.resolve()
-    raise RuntimeError("Visual Studio with the MSVC x64 tools was not found")
-
-
-def locate_cmake(visual_studio: Path) -> Path:
-    from_path = shutil.which("cmake.exe")
-    if from_path is not None:
-        return Path(from_path)
-    bundled = (
-        visual_studio
-        / "Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
-    )
-    if bundled.is_file():
-        return bundled
-    raise RuntimeError("cmake.exe was not found in PATH or Visual Studio")
-
-
-def locate_dumpbin(visual_studio: Path) -> Path:
-    candidates = sorted(
-        (visual_studio / "VC/Tools/MSVC").glob("*/bin/Hostx64/x64/dumpbin.exe"),
-        reverse=True,
-    )
-    if not candidates:
-        raise RuntimeError("dumpbin.exe was not found in Visual Studio")
-    return candidates[0]
-
-
-def locate_debugging_tools() -> Path:
-    candidates: list[Path] = []
-    for variable in ("ProgramFiles(x86)", "ProgramFiles"):
-        root_text = os.environ.get(variable)
-        if not root_text:
-            continue
-        windows_kits = Path(root_text) / "Windows Kits"
-        candidates.extend(
-            sorted(windows_kits.glob("*/Debuggers/x64"), reverse=True)
-        )
-
-    for candidate in candidates:
-        if all(
-            (candidate / name).is_file()
-            for name in ("dbghelp.dll", "symsrv.dll")
-        ):
-            return candidate.resolve()
-    raise RuntimeError(
-        "Windows Debugging Tools with x64 dbghelp.dll and symsrv.dll were not found"
-    )
-
-
-def select_visual_studio_generator(cmake: Path) -> str:
-    result = run([str(cmake), "--help"], capture_output=True)
-    generators = re.findall(r"Visual Studio \d+ \d+", result.stdout)
-    if not generators:
-        raise RuntimeError("CMake does not advertise a Visual Studio generator")
-    return generators[0]
-
-
-def build(configuration: str) -> Path:
-    if os.name != "nt":
-        raise RuntimeError("the native shim currently supports Windows only")
-    check_runtime_submodule()
-
-    visual_studio = locate_visual_studio()
-    cmake = locate_cmake(visual_studio)
-    dumpbin = locate_dumpbin(visual_studio)
-    generator = select_visual_studio_generator(cmake)
-    environment = os.environ.copy()
-    cargo_target = REPOSITORY_ROOT / "target"
-    environment["CARGO_TARGET_DIR"] = str(cargo_target)
-
-    cargo_command = ["cargo", "build", "--locked", "-p", "gc-rust"]
-    if configuration == "release":
-        cargo_command.append("--release")
-    run(cargo_command, env=environment)
-
-    rust_profile = "release" if configuration == "release" else "debug"
-    rust_output = cargo_target / rust_profile
-    cmake_configuration = "Release" if configuration == "release" else "Debug"
-    build_directory = REPOSITORY_ROOT / "out/build/native-shim" / configuration
-
-    run(
-        [
-            str(cmake),
-            "-S",
-            str(REPOSITORY_ROOT / "native-shim"),
-            "-B",
-            str(build_directory),
-            "-G",
-            generator,
-            "-A",
-            "x64",
-            f"-DRUST_OUTPUT_DIR={rust_output}",
-        ],
-        env=environment,
-    )
-    run(
-        [str(cmake), "--build", str(build_directory), "--config", cmake_configuration],
-        env=environment,
-    )
-
-    shim = build_directory / "stage/dotnet_gc_shim.dll"
-    if not shim.is_file():
-        raise RuntimeError(f"native shim was not produced: {shim}")
-    verify_exports(shim, dumpbin, environment)
-    log(f"Built {shim}")
-    return shim
-
-
-def verify_exports(
-    shim: Path, dumpbin: Path, environment: dict[str, str]
-) -> None:
-    result = run(
-        [str(dumpbin), "/exports", str(shim)],
-        env=environment,
-        capture_output=True,
-    )
-    missing = [
-        export
-        for export in ("GC_Initialize", "GC_VersionInfo")
-        if export not in result.stdout
-    ]
-    if missing:
-        raise RuntimeError(f"native shim is missing exports: {', '.join(missing)}")
-    log("Verified exports: GC_Initialize, GC_VersionInfo")
-
-
-def clean_stock_gc_environment() -> dict[str, str]:
-    """Return the environment used by managed checks that must use the stock GC."""
-    environment = os.environ.copy()
-    for key in list(environment):
-        if key.casefold() in {
-            "dotnet_gcpath", "dotnet_gcname", "complus_gcpath", "complus_gcname"
-        }:
-            del environment[key]
-    return environment
-
-
-def verify() -> None:
-    """Run the repeatable Windows checks that do not need the nightly Miri toolchain."""
-    run(["cargo", "fmt", "--all", "--", "--check"])
-    run(
-        [
-            "cargo",
-            "clippy",
-            "--workspace",
-            "--all-targets",
-            "--locked",
-            "--",
-            "-D",
-            "warnings",
-        ]
-    )
-    run(["cargo", "test", "--workspace", "--locked"])
-
-    environment = clean_stock_gc_environment()
-    project = REPOSITORY_ROOT / "samples/LoaderSmoke/LoaderSmoke.csproj"
-    run(["dotnet", "build", str(project)], env=environment)
-    result = run(
-        ["dotnet", "run", "--no-build", "--project", str(project)],
-        env=environment,
-        capture_output=True,
-    )
-    if result.stdout.strip() != LOADER_SMOKE_OUTPUT or result.stderr:
-        raise RuntimeError(
-            "the stock-GC LoaderSmoke output did not match "
-            f"{LOADER_SMOKE_OUTPUT!r}"
-        )
-    log(f"Stock-GC LoaderSmoke output: {LOADER_SMOKE_OUTPUT}")
-
-
-def miri() -> None:
-    """Run the gc-rust tests under the pinned nightly Miri interpreter."""
-    run(["cargo", f"+{MIRI_TOOLCHAIN}", "miri", "setup"])
-    run(
-        [
-            "cargo",
-            f"+{MIRI_TOOLCHAIN}",
-            "miri",
-            "test",
-            "--locked",
-            "-p",
-            "gc-rust",
-        ]
-    )
-
-
-def smoke(configuration: str, symbol_server: str | None) -> None:
-    shim = build(configuration)
-    environment = clean_stock_gc_environment()
-
-    if symbol_server is not None:
-        SYMBOL_CACHE.mkdir(parents=True, exist_ok=True)
-        symbol_server_path = f"srv*{SYMBOL_CACHE}*{symbol_server}"
-        existing_symbol_path = environment.get("_NT_SYMBOL_PATH")
-        environment["_NT_SYMBOL_PATH"] = os.pathsep.join(
-            part
-            for part in (existing_symbol_path, symbol_server_path)
-            if part
-        )
-        log(f"Native symbol path: {environment['_NT_SYMBOL_PATH']}")
-
-    project = REPOSITORY_ROOT / "samples/LoaderSmoke/LoaderSmoke.csproj"
-    run(["dotnet", "build", str(project)], env=environment)
-
-    sample = REPOSITORY_ROOT / "samples/LoaderSmoke/bin/Debug/net10.0/LoaderSmoke.exe"
-    if symbol_server is not None:
-        debugging_tools = locate_debugging_tools()
-        for library in ("dbghelp.dll", "symsrv.dll"):
-            shutil.copy2(debugging_tools / library, sample.parent / library)
-        log(f"Using DbgHelp and SymSrv from {debugging_tools}")
-
-    environment["DOTNET_GCPath"] = str(shim)
-    environment["DOTNET_GCServer"] = "0"
-    environment["PATH"] = f"{shim.parent}{os.pathsep}{environment.get('PATH', '')}"
-    result = run(
-        [str(sample)],
-        env=environment,
-        capture_output=True,
-        check=False,
-    )
-    if result.stdout:
-        sys.stdout.write(result.stdout)
-        sys.stdout.flush()
-    if result.stderr:
-        sys.stderr.write(result.stderr)
-        sys.stderr.flush()
-
-    output = result.stdout + result.stderr
-    if result.returncode != 0:
-        raise RuntimeError(
-            f"the loader exited with code {result.returncode}; expected zero"
-        )
-    if (
-        LOADER_DIAGNOSTIC not in output
-        or LOADER_SMOKE_OUTPUT not in result.stdout.splitlines()
-        or "GC initialization failed" in output
-        or INTERFACE_SHELL_DIAGNOSTIC in output
-    ):
-        raise RuntimeError("the loader failed initialization or exited unexpectedly")
-
-    log("Loader smoke test completed successfully")
-
-    server_environment = environment.copy()
-    server_environment["DOTNET_GCServer"] = "1"
-    server_result = run(
-        [str(sample)],
-        env=server_environment,
-        capture_output=True,
-        check=False,
-    )
-    server_output = server_result.stdout + server_result.stderr
-    if server_result.returncode == 0 or SERVER_GC_DIAGNOSTIC not in server_output:
-        if server_result.stdout:
-            sys.stdout.write(server_result.stdout)
-            sys.stdout.flush()
-        if server_result.stderr:
-            sys.stderr.write(server_result.stderr)
-            sys.stderr.flush()
-        raise RuntimeError("the shim did not reject Server GC as expected")
-    log("Loader smoke test rejected Server GC")
-
-
-def matrix(report_dir: Path | None = None) -> None:
-    """Run isolated managed scenarios under both collectors and check diagnostics."""
-    if report_dir is not None:
-        report_dir = (REPOSITORY_ROOT / report_dir).resolve()
-        report_dir.mkdir(parents=True, exist_ok=True)
-
-    shim = build("debug")
-    environment = clean_stock_gc_environment()
-    environment.pop("ZERO_GC_LIMIT_BYTES", None)
-    environment["DOTNET_GCServer"] = "0"
-    project = REPOSITORY_ROOT / "samples/LoaderSmoke/LoaderSmoke.csproj"
-    run(["dotnet", "build", str(project)], env=environment)
-    sample = REPOSITORY_ROOT / "samples/LoaderSmoke/bin/Debug/net10.0/LoaderSmoke.exe"
-
-    custom_environment = environment.copy()
-    custom_environment["DOTNET_GCPath"] = str(shim)
-    custom_environment["PATH"] = f"{shim.parent}{os.pathsep}{environment.get('PATH', '')}"
-
-    def execute(
-        scenario: str, env: dict[str, str], label: str
-    ) -> subprocess.CompletedProcess[str]:
-        arguments = [] if scenario == "smoke" else [scenario]
-        result = subprocess.run(
-            [str(sample), *arguments],
-            cwd=REPOSITORY_ROOT,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False,
-        )
-        if report_dir is not None:
-            (report_dir / f"{label}.stdout.log").write_text(
-                result.stdout, encoding="utf-8"
-            )
-            (report_dir / f"{label}.stderr.log").write_text(
-                result.stderr, encoding="utf-8"
-            )
-        return result
-
-    def check_counters(output: str, expected_limit: int, failed: bool) -> tuple[int, int]:
-        matches = re.findall(
-            r"ZeroGC counters: requests=(\d+) successful=(\d+) "
-            r"requested_bytes=(\d+) owned_bytes=(\d+) limit=(\d+) "
-            r"ranges=(\d+) registry_bytes=(\d+) disjoint=(true|false) gaps=(\d+)",
-            output,
-        )
-        if not matches:
-            raise RuntimeError("ZeroGC did not report allocation counters")
-        requests, successful, requested, owned, limit, ranges, registry_bytes, disjoint, gaps = matches[-1]
-        requests, successful, requested, owned, limit, ranges, registry_bytes, gaps = map(
-            int, (requests, successful, requested, owned, limit, ranges, registry_bytes, gaps)
-        )
-        if not (
-            requests >= successful > 0
-            and requested > 0
-            and owned <= limit == expected_limit
-            and ranges == successful
-            and registry_bytes >= ranges * 16
-            and disjoint == "true"
-            and gaps > 0
-            and output.count("ZeroGC native range:") >= 2
-            and "ZeroGC heap walk: unavailable" in output
-            and (requests == successful + 1 if failed else requests == successful)
-        ):
-            raise RuntimeError(f"ZeroGC counters did not reconcile: {matches[-1]}")
-        return successful, owned
-
-    for scenario in SCENARIOS:
-        stock = execute(scenario, environment, f"{scenario}.stock")
-        success_line = (
-            LOADER_SMOKE_OUTPUT if scenario == "smoke" else f"scenario {scenario} ok"
-        )
-        if stock.returncode != 0 or success_line not in stock.stdout.splitlines():
-            raise RuntimeError(
-                f"stock GC {scenario} failed ({stock.returncode}):\n"
-                f"{stock.stdout}\n{stock.stderr}"
-            )
-
-        scenario_environment = custom_environment.copy()
-        expected_limit = DEFAULT_MATRIX_LIMIT_BYTES
-        if scenario == "exhaust":
-            expected_limit = EXHAUST_LIMIT_BYTES
-            scenario_environment["ZERO_GC_LIMIT_BYTES"] = str(expected_limit)
-
-        attempts = 2 if scenario == "exhaust" else 1
-        exhaustion_counts = []
-        result = ""
-        for attempt in range(1, attempts + 1):
-            suffix = f".{attempt}" if attempts > 1 else ""
-            custom = execute(
-                scenario, scenario_environment, f"{scenario}.zerogc{suffix}"
-            )
-            output = custom.stdout + custom.stderr
-            methods = re.findall(
-                r"dotnet-gc-rust: unimplemented method called: (\w+)", output
-            )
-            if scenario == "exhaust":
-                valid = (
-                    custom.returncode != 0
-                    and "ZeroGC: allocation limit exceeded" in output
-                    and "dotnet-gc-rust: IGCHeap::Alloc failed" in output
-                    and not methods
-                )
-                if valid:
-                    exhaustion_counts.append(check_counters(output, expected_limit, True))
-                result = "deterministic exhaustion at IGCHeap::Alloc"
-            elif scenario in UNSUPPORTED_METHODS:
-                valid = (
-                    custom.returncode != 0
-                    and methods
-                    and methods[-1] == UNSUPPORTED_METHODS[scenario]
-                )
-                if valid:
-                    check_counters(output, expected_limit, False)
-                result = f"unsupported by {UNSUPPORTED_METHODS[scenario]}"
-            else:
-                valid = (
-                    custom.returncode == 0
-                    and success_line in custom.stdout.splitlines()
-                    and not methods
-                )
-                if valid:
-                    check_counters(output, expected_limit, False)
-                result = "works"
-            if not valid:
-                raise RuntimeError(
-                    f"ZeroGC {scenario}: unexpected defect ({custom.returncode}):\n"
-                    f"{output}"
-                )
-        if scenario == "exhaust" and exhaustion_counts[0] != exhaustion_counts[1]:
-            raise RuntimeError(f"exhaustion was not reproducible: {exhaustion_counts}")
-        log(f"{scenario}: stock GC works; ZeroGC {result}")
-    if report_dir is not None:
-        log(f"Matrix logs: {report_dir}")
-
-
-DEFAULT_MATRIX_LIMIT_BYTES = 64 * 1024 * 1024
+from gc_tools.build import build
+from gc_tools.matrix import matrix
+from gc_tools.miri import miri
+from gc_tools.smoke import smoke
+from gc_tools.verify import verify
+from gc_tools.constants import MICROSOFT_SYMBOL_SERVER, SYMBOL_CACHE
+from gc_tools.utils import log
 
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # verify
     subparsers.add_parser(
-        "verify", help="run formatting, lint, Rust tests, and the stock-GC sample"
+        "verify",
+        help="run formatting, lint, Rust tests, and the stock-GC sample"
     )
-    subparsers.add_parser("miri", help="run gc-rust tests under the pinned Miri")
+
+    # miri
+    subparsers.add_parser(
+        "miri",
+        help="run gc-rust tests under the pinned Miri"
+    )
+
+    # matrix
     matrix_parser = subparsers.add_parser(
-        "matrix", help="run bounded scenarios under both GCs"
+        "matrix",
+        help="run bounded scenarios under both GCs"
     )
     matrix_parser.add_argument(
         "--report-dir",
@@ -554,24 +42,31 @@ def parse_arguments() -> argparse.Namespace:
         help="write each scenario's stdout and stderr to separate files",
     )
 
-    for command in ("build", "smoke"):
-        command_parser = subparsers.add_parser(command)
-        command_parser.add_argument(
-            "--configuration",
-            choices=("debug", "release"),
-            default="debug",
-        )
+    # build
+    build_parser = subparsers.add_parser("build")
+    build_parser.add_argument(
+        "--configuration",
+        choices=("debug", "release"),
+        default="debug"
+    )
 
-        if command == "smoke":
-            command_parser.add_argument(
-                "--symbol-server",
-                metavar="ADDRESS",
-                default=MICROSOFT_SYMBOL_SERVER,
-                help=(
-                    "symbol server address used by DbgHelp; downloaded symbols "
-                    f"are cached under {SYMBOL_CACHE}"
-                ),
-            )
+    # smoke
+    smoke_parser = subparsers.add_parser("smoke")
+    smoke_parser.add_argument(
+        "--configuration",
+        choices=("debug", "release"),
+        default="debug"
+    )
+    smoke_parser.add_argument(
+        "--symbol-server",
+        metavar="ADDRESS",
+        default=MICROSOFT_SYMBOL_SERVER,
+        help=(
+            "symbol server address used by DbgHelp; downloaded symbols "
+            f"are cached under {SYMBOL_CACHE}"
+        ),
+    )
+
     return parser.parse_args()
 
 
@@ -586,9 +81,9 @@ def main() -> int:
             matrix(arguments.report_dir)
         elif arguments.command == "build":
             build(arguments.configuration)
-        else:
+        elif arguments.command == "smoke":
             smoke(arguments.configuration, arguments.symbol_server)
-    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
+    except (OSError, RuntimeError, subprocess.SubprocessError) as error:
         log(f"error: {error}", is_error=True)
         return 1
     return 0
