@@ -1,5 +1,11 @@
 # Graph reachability
 
+For Mission 07's shared managed scenarios, run
+`cargo run --locked -p gc-rust --example managed_graph_fixtures -- samples/GraphFixtures/scenarios.txt`.
+The example checks marking against hand-written live sets before sweeping.
+See [GraphFixtures](../../../samples/GraphFixtures/README.md) for the combined
+managed/model checkpoint and observation contract.
+
 Run the standalone Rust model from the repository root:
 
 ```sh

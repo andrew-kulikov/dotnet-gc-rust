@@ -5,6 +5,8 @@ This directory will contain small C# programs that demonstrate one behavior at a
 Planned samples:
 
 - `LoaderSmoke` — starts with the custom GC and performs a small allocation.
+- [`GraphFixtures`](GraphFixtures/README.md) — bounded one-field node graphs,
+  shared expected live sets, and construction/continuation markers.
 - `ObjectLayouts` — classes, strings, arrays, inheritance, and value types containing references.
 - `GcFeatures` — handles, weak references, pinning, finalizers, and resurrection.
 - `FrameWorkload` — deterministic 60 Hz and 120 Hz allocation workloads.
