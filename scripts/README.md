@@ -12,6 +12,25 @@ python scripts/graph_fixtures.py
 python scripts/graph_fixtures.py --stock-only
 ```
 
+Both entry points accept `--log-level error|warn|info|debug|trace` to set Rust
+collector verbosity for child processes. For `build.py`, put this top-level
+option before the operation:
+
+```console
+python scripts/build.py --log-level trace smoke
+python scripts/build.py --log-level debug matrix --report-dir out/matrix
+python scripts/graph_fixtures.py --log-level trace
+```
+
+Levels are case-insensitive. An explicit option overrides `RUST_GC_LOG_LEVEL`;
+omitting it preserves the inherited value, with the Rust logger defaulting to
+`info` when the variable is missing or invalid. This option controls Rust logs;
+Python progress messages and tool output remain visible.
+
+The runner colors its own errors and replayed stderr red, and command lines
+green, when the corresponding output stream is a terminal. Redirected output
+stays plain, and saved scenario reports retain the original child-process text.
+
 `build.py` handles CLI arguments and dispatches to the build, verify, Miri,
 smoke, and matrix modules in `gc_tools/`. `graph_fixtures.py` runs the graph
 comparison and handles its own CLI. Validation specific to a command stays

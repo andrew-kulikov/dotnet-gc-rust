@@ -2,6 +2,8 @@ use std::ffi::c_void;
 use std::ptr;
 use std::sync::Mutex;
 
+use crate::util::{log_debug, log_trace};
+
 /// Rust's C ABI representation of CoreCLR's `segment_info`.
 ///
 /// Every size is a byte offset from `memory`. The descriptor itself is borrowed
@@ -79,7 +81,7 @@ impl FrozenSegment {
 pub unsafe extern "C" fn rust_gc_register_frozen_segment(
     segment_info: *const FrozenSegmentInfo,
 ) -> FrozenSegmentHandle {
-    println!("rust_gc_register_frozen_segment: {:?}", segment_info);
+    log_debug!("rust_gc_register_frozen_segment: {:?}", segment_info);
 
     if segment_info.is_null() {
         return ptr::null_mut();
@@ -116,9 +118,11 @@ pub unsafe extern "C" fn rust_gc_update_frozen_segment(
     allocated: *mut u8,
     committed: *mut u8,
 ) {
-    println!(
+    log_trace!(
         "rust_gc_update_frozen_segment({:?}, allocated: {:?}, committed: {:?})",
-        segment, allocated as usize, committed as usize
+        segment,
+        allocated as usize,
+        committed as usize
     );
 
     if segment.is_null() {

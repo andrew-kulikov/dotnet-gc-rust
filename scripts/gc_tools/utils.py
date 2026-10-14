@@ -1,17 +1,41 @@
 """Shared process, reporting, and managed-sample helpers."""
 
+import argparse
 from collections.abc import Mapping
 import os
 from pathlib import Path
 import shlex
 import subprocess
 import sys
+from typing import TextIO
 
 from .constants import REPOSITORY_ROOT, SCENARIO_TIMEOUT_SECONDS, TARGET_FRAMEWORK
 
 
+def add_log_level_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--log-level",
+        type=str.lower,
+        choices=("error", "warn", "info", "debug", "trace"),
+        help=(
+            "set Rust collector log verbosity for child processes "
+            "(default: inherited RUST_GC_LOG_LEVEL, otherwise info)"
+        ),
+    )
+
+
+def _colorize(message: str, color: int, stream: TextIO) -> str:
+    if stream.isatty():
+        return f"\033[{color}m{message}\033[0m"
+    return message
+
+
 def log(message: str, *, is_error: bool = False) -> None:
-    print(f"build-py: {message}", file=sys.stderr if is_error else sys.stdout, flush=True)
+    stream = sys.stderr if is_error else sys.stdout
+    output = f"build-py: {message}"
+    if is_error:
+        output = _colorize(output, 31, stream)
+    print(output, file=stream, flush=True)
 
 
 def display_command(command: list[str]) -> str:
@@ -29,7 +53,7 @@ def run(
     check: bool = True,
     timeout: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    log(f"\033[32m{display_command(command)}\033[0m\n")
+    log(f"{_colorize(display_command(command), 32, sys.stdout)}\n")
     return subprocess.run(
         command,
         cwd=cwd,
@@ -67,6 +91,8 @@ def run_scenario(
 def print_output(result: subprocess.CompletedProcess[str]) -> None:
     for output, stream in ((result.stdout, sys.stdout), (result.stderr, sys.stderr)):
         if output:
+            if stream is sys.stderr:
+                output = _colorize(output, 31, stream)
             stream.write(output)
             stream.flush()
 

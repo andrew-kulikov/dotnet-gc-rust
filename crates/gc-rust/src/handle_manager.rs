@@ -3,16 +3,17 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 
 use crate::handle_store::ObjectHandle;
 use crate::object::Object;
+use crate::util::{log_info, log_trace};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_gc_handle_manager_initialize() -> bool {
-    println!("rust_gc_handle_manager_initialize()");
+    log_info!("rust_gc_handle_manager_initialize()");
     true
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_gc_handle_manager_destroy_handle_of_unknown_type(handle: ObjectHandle) {
-    println!("rust_gc_handle_manager_destroy_handle_of_unknown_type(handle: {handle:p})");
+    log_trace!("rust_gc_handle_manager_destroy_handle_of_unknown_type(handle: {handle:p})");
 
     // ZeroGC intentionally keeps handle records alive for the lifetime of the
     // process. A collecting GC must reclaim or recycle this record once it can
@@ -35,7 +36,7 @@ pub unsafe extern "C" fn rust_gc_handle_manager_interlocked_compare_exchange_obj
     object: Object,
     comparand_object: Object,
 ) -> Object {
-    println!(
+    log_trace!(
         "rust_gc_handle_manager_interlocked_compare_exchange_object_in_handle(handle: {handle:p}, object: {object:p}, comparand_object: {comparand_object:p})"
     );
     // Object is transparent over `*mut c_void`, and handle records are aligned
@@ -61,7 +62,7 @@ pub unsafe extern "C" fn rust_gc_handle_manager_store_object_in_handle(
     handle: ObjectHandle,
     object: Object,
 ) {
-    println!(
+    log_trace!(
         "rust_gc_handle_manager_store_object_in_handle(handle: {handle:p}, object: {object:p})"
     );
 

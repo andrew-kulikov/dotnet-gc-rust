@@ -2,6 +2,7 @@
 """Build and check the Windows x64 CoreCLR GC shim."""
 
 import argparse
+import os
 from pathlib import Path
 import subprocess
 
@@ -11,11 +12,12 @@ from gc_tools.miri import miri
 from gc_tools.smoke import smoke
 from gc_tools.verify import verify
 from gc_tools.constants import MICROSOFT_SYMBOL_SERVER, SYMBOL_CACHE
-from gc_tools.utils import log
+from gc_tools.utils import add_log_level_argument, log
 
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    add_log_level_argument(parser)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # verify
@@ -72,6 +74,8 @@ def parse_arguments() -> argparse.Namespace:
 
 def main() -> int:
     arguments = parse_arguments()
+    if arguments.log_level is not None:
+        os.environ["RUST_GC_LOG_LEVEL"] = arguments.log_level
     try:
         if arguments.command == "verify":
             verify()

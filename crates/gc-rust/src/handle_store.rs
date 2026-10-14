@@ -2,6 +2,7 @@ use std::alloc::{Layout, alloc};
 use std::ptr;
 
 use crate::object::Object;
+use crate::util::log_trace;
 
 /// Address of a stable slot whose value is an [`Object`].
 ///
@@ -21,7 +22,7 @@ pub extern "C" fn rust_gc_handle_store_create_handle_of_type(
     object: Object,
     handle_type: u32,
 ) -> ObjectHandle {
-    println!("rust_gc_handle_store_create_handle_of_type: {object:?} with type: {handle_type}");
+    log_trace!("rust_gc_handle_store_create_handle_of_type: {object:?} with type: {handle_type}");
 
     let layout = Layout::new::<HandleRecord>();
 

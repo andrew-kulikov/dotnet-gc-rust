@@ -2,6 +2,7 @@
 """Check shared graph fixtures with the Rust model, stock GC, and Windows ZeroGC."""
 
 import argparse
+import os
 from pathlib import Path
 import subprocess
 
@@ -9,7 +10,8 @@ from gc_tools.build import build
 from gc_tools.constants import INTERFACE_SHELL_DIAGNOSTIC, LOADER_DIAGNOSTIC, REPOSITORY_ROOT
 from gc_tools.fixtures import GraphFixture, load_fixtures
 from gc_tools.utils import (
-    build_sample, custom_gc_environment, log, run, run_scenario, workstation_environment,
+    add_log_level_argument, build_sample, custom_gc_environment, log, run, run_scenario,
+    workstation_environment,
 )
 
 
@@ -89,10 +91,13 @@ def check(stock_only: bool = False) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    add_log_level_argument(parser)
     parser.add_argument(
         "--stock-only", action="store_true", help="explicitly skip Windows ZeroGC"
     )
     arguments = parser.parse_args()
+    if arguments.log_level is not None:
+        os.environ["RUST_GC_LOG_LEVEL"] = arguments.log_level
     try:
         check(arguments.stock_only)
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:

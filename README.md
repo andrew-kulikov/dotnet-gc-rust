@@ -75,6 +75,20 @@ The script uses only the Python standard library. The current shim itself remain
 See [scripts/README.md](scripts/README.md) for the command layout and shared
 helpers for tasks and labs.
 
+## Rust logging
+
+`RUST_GC_LOG_LEVEL` sets the Rust collector's maximum log level: `error`,
+`warn`, `info`, `debug`, or `trace` (case-insensitive). The value is read once
+on the first log call; a missing or invalid value defaults to `info`.
+Error messages go to stderr; other levels go to stdout. Use `trace` to see
+individual handle operations and frozen-segment updates.
+
+Inside the crate, import the macros you need from `crate::util`:
+`log_error!`, `log_warn!`, `log_info!`, `log_debug!`, and `log_trace!`.
+For example, `log_debug!("Object: {object:p}")` supports the same formatting
+syntax as `println!`. These macros skip argument evaluation for disabled
+levels and format directly without an intermediate `String`.
+
 ## Quality bar
 
 Every milestone should leave the repository in a runnable state. The project will use:

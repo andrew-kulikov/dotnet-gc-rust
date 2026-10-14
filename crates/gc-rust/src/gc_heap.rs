@@ -3,6 +3,7 @@ use crate::object::Object;
 use crate::runtime::{
     HResult, IGcToClr, S_OK, WriteBarrierOp, WriteBarrierParameters, gc_to_clr, install_gc_to_clr,
 };
+use crate::util::{log_error, log_info, log_trace};
 use std::alloc::{Layout, alloc_zeroed};
 use std::ptr;
 use std::sync::{LazyLock, Mutex, OnceLock};
@@ -32,15 +33,15 @@ impl Ledger {
         self.requests = self.requests.saturating_add(1);
         self.requested_bytes = self.requested_bytes.saturating_add(size);
         let Some(layout) = object_layout(size) else {
-            eprintln!("ZeroGC: invalid allocation size: {size}");
+            log_error!("ZeroGC: invalid allocation size: {size}");
             return Object::from_ptr(ptr::null_mut());
         };
         let Some(next_owned) = self.owned_bytes.checked_add(layout.size()) else {
-            eprintln!("ZeroGC: allocation accounting overflow");
+            log_error!("ZeroGC: allocation accounting overflow");
             return Object::from_ptr(ptr::null_mut());
         };
         if next_owned > limit {
-            eprintln!(
+            log_error!(
                 "ZeroGC: allocation limit exceeded: owned={} requested={} limit={limit}",
                 self.owned_bytes,
                 layout.size()
@@ -48,7 +49,7 @@ impl Ledger {
             return Object::from_ptr(ptr::null_mut());
         }
         if self.ranges.try_reserve(1).is_err() {
-            eprintln!("ZeroGC: allocation registry exhausted");
+            log_error!("ZeroGC: allocation registry exhausted");
             return Object::from_ptr(ptr::null_mut());
         }
 
@@ -56,14 +57,14 @@ impl Ledger {
         // for the process lifetime and never handed to a second allocation.
         let base = unsafe { alloc_zeroed(layout) };
         if base.is_null() {
-            eprintln!("ZeroGC: native allocation failed");
+            log_error!("ZeroGC: native allocation failed");
             return Object::from_ptr(ptr::null_mut());
         }
         let start = base as usize;
         let Some(end) = start.checked_add(layout.size()) else {
             // SAFETY: base was just allocated with this layout.
             unsafe { std::alloc::dealloc(base, layout) };
-            eprintln!("ZeroGC: native address overflow");
+            log_error!("ZeroGC: native address overflow");
             return Object::from_ptr(ptr::null_mut());
         };
         self.ranges.push((start, end));
@@ -83,7 +84,7 @@ impl Ledger {
             .filter(|pair| pair[0].1 < pair[1].0)
             .count();
         let registry_bytes = self.ranges.capacity() * size_of::<(usize, usize)>();
-        eprintln!(
+        log_error!(
             "ZeroGC counters: requests={} successful={} requested_bytes={} owned_bytes={} limit={} ranges={} registry_bytes={} disjoint={} gaps={}",
             self.requests,
             self.successful,
@@ -96,9 +97,9 @@ impl Ledger {
             gaps
         );
         for (start, end) in self.ranges.iter().take(2) {
-            eprintln!("ZeroGC native range: [{start:#x}, {end:#x})");
+            log_error!("ZeroGC native range: [{start:#x}, {end:#x})");
         }
-        eprintln!("ZeroGC heap walk: unavailable; objects are separate native allocations");
+        log_error!("ZeroGC heap walk: unavailable; objects are separate native allocations");
     }
 }
 
@@ -109,7 +110,7 @@ static mut INERT_CARD_TABLE: u32 = 0;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_gc_loader_probe() -> HResult {
-    println!("rust_gc_loader_probe()");
+    log_info!("rust_gc_loader_probe()");
     S_OK
 }
 
@@ -136,19 +137,19 @@ pub extern "C" fn rust_gc_is_gc_in_progress_helper(_b_consider_gc_start: bool) -
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_gc_initialize(gc_to_clr_source: *const IGcToClr) -> HResult {
-    println!("rust_gc_initialize()");
+    log_info!("rust_gc_initialize()");
 
     let limit = match std::env::var("ZERO_GC_LIMIT_BYTES") {
         Ok(value) => match value.parse::<usize>() {
             Ok(limit) if limit > 0 => limit,
             _ => {
-                eprintln!("ZeroGC: ZERO_GC_LIMIT_BYTES must be a positive integer");
+                log_error!("ZeroGC: ZERO_GC_LIMIT_BYTES must be a positive integer");
                 DEFAULT_LIMIT_BYTES
             }
         },
         Err(std::env::VarError::NotPresent) => DEFAULT_LIMIT_BYTES,
         Err(std::env::VarError::NotUnicode(_)) => {
-            eprintln!("ZeroGC: ZERO_GC_LIMIT_BYTES must be a positive integer");
+            log_error!("ZeroGC: ZERO_GC_LIMIT_BYTES must be a positive integer");
             DEFAULT_LIMIT_BYTES
         }
     };
@@ -214,7 +215,7 @@ pub extern "C" fn rust_gc_alloc(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_gc_set_finalization_run(obj: Object) {
-    println!("rust_gc_set_finalization_run(obj: {obj:p})");
+    log_trace!("rust_gc_set_finalization_run(obj: {obj:p})");
     // TODO: Implement finalization bit flipping logic. Currently, this is a no-op.
 }
 
