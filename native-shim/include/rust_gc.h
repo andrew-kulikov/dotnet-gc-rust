@@ -15,15 +15,19 @@ struct WriteBarrierParameters;
 // IGCToCLR interface bridge
 extern "C"
 {
-    typedef HRESULT StompWriteBarrier_Func(
+    typedef void StompWriteBarrier_Func(
         void* context,
         WriteBarrierParameters* parameters) noexcept;
+    typedef void SuspendEE_Func(void* context, std::int32_t reason) noexcept;
+    typedef void RestartEE_Func(void* context, bool finished_gc) noexcept;
 }
 
 struct RustGCToCLR
 {
     void* context;
     StompWriteBarrier_Func* stomp_write_barrier;
+    SuspendEE_Func* suspend_ee;
+    RestartEE_Func* restart_ee;
 };
 
 // IGCHeap implementation

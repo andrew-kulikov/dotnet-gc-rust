@@ -44,24 +44,10 @@ static_assert(sizeof(bool) == 1);
 static_assert(sizeof(std::underlying_type_t<WriteBarrierOp>) == 4);
 static_assert(sizeof(WriteBarrierParameters) == 80);
 static_assert(alignof(WriteBarrierParameters) == 8);
-static_assert(offsetof(WriteBarrierParameters, operation) == 0);
-static_assert(offsetof(WriteBarrierParameters, is_runtime_suspended) == 4);
-static_assert(offsetof(WriteBarrierParameters, requires_upper_bounds_check) == 5);
-static_assert(offsetof(WriteBarrierParameters, card_table) == 8);
-static_assert(offsetof(WriteBarrierParameters, card_bundle_table) == 16);
-static_assert(offsetof(WriteBarrierParameters, lowest_address) == 24);
-static_assert(offsetof(WriteBarrierParameters, highest_address) == 32);
-static_assert(offsetof(WriteBarrierParameters, ephemeral_low) == 40);
-static_assert(offsetof(WriteBarrierParameters, ephemeral_high) == 48);
-static_assert(offsetof(WriteBarrierParameters, write_watch_table) == 56);
-static_assert(offsetof(WriteBarrierParameters, region_to_generation_table) == 64);
-static_assert(offsetof(WriteBarrierParameters, region_shr) == 72);
-static_assert(offsetof(WriteBarrierParameters, region_use_bitwise_write_barrier) == 73);
+static_assert(sizeof(SUSPEND_REASON) == 4);
 static_assert(std::is_standard_layout_v<RustGCToCLR>);
-static_assert(sizeof(RustGCToCLR) == 16);
+static_assert(sizeof(RustGCToCLR) == 32);
 static_assert(alignof(RustGCToCLR) == 8);
-static_assert(offsetof(RustGCToCLR, context) == 0);
-static_assert(offsetof(RustGCToCLR, stomp_write_barrier) == 8);
 static_assert(GC_INTERFACE_MAJOR_VERSION == 5, "Unexpected CoreCLR GC interface major version");
 static_assert(GC_INTERFACE_MINOR_VERSION == 5, "Unexpected CoreCLR GC interface minor version");
 
@@ -230,30 +216,23 @@ template<typename ReturnType>
 // ----------------------------------------------------------------------
 IGCToCLR* GlobalGCToCLR = nullptr;
 
-extern "C" HRESULT StompWriteBarrier_Invoke(
+// The pinned shim always supplies a live context and valid arguments.
+// noexcept terminates on a C++ exception instead of unwinding through Rust.
+extern "C" void StompWriteBarrier_Invoke(
     void* context,
     WriteBarrierParameters* parameters) noexcept
 {
-    if ((context == nullptr) || (parameters == nullptr))
-    {
-        return E_POINTER;
-    }
-    if ((parameters->operation < WriteBarrierOp::StompResize) ||
-        (parameters->operation > WriteBarrierOp::SwitchToNonWriteWatch))
-    {
-        return E_INVALIDARG;
-    }
+    static_cast<IGCToCLR*>(context)->StompWriteBarrier(parameters);
+}
 
-    try
-    {
-        static_cast<IGCToCLR*>(context)->StompWriteBarrier(parameters);
-        return S_OK;
-    }
-    catch (...)
-    {
-        // No C++ exception may cross the C ABI callback into Rust.
-        return E_FAIL;
-    }
+extern "C" void SuspendEE_Invoke(void* context, std::int32_t reason) noexcept
+{
+    static_cast<IGCToCLR*>(context)->SuspendEE(static_cast<SUSPEND_REASON>(reason));
+}
+
+extern "C" void RestartEE_Invoke(void* context, bool finished_gc) noexcept
+{
+    static_cast<IGCToCLR*>(context)->RestartEE(finished_gc);
 }
 // IGCToCLR
 
@@ -370,9 +349,10 @@ public:
         const RustGCToCLR gcToClr{
             GlobalGCToCLR,
             StompWriteBarrier_Invoke,
+            SuspendEE_Invoke,
+            RestartEE_Invoke,
         };
-        HRESULT hr = rust_gc_initialize(&gcToClr);
-        return hr;
+        return rust_gc_initialize(&gcToClr);
     }
     ABORTING_OVERRIDE(bool, IsPromoted, (Object* object))
     ABORTING_OVERRIDE(

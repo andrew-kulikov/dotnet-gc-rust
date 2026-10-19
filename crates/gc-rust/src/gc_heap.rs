@@ -1,7 +1,7 @@
 use crate::alloc::{GcAllocContext, GcAllocFlags};
 use crate::object::Object;
 use crate::runtime::{
-    HResult, IGcToClr, S_OK, WriteBarrierOp, WriteBarrierParameters, gc_to_clr, install_gc_to_clr,
+    GcToClr, HResult, S_OK, WriteBarrierOp, WriteBarrierParameters, install_gc_to_clr,
 };
 use crate::util::{log_error, log_info, log_trace};
 use std::alloc::{Layout, alloc_zeroed};
@@ -136,7 +136,7 @@ pub extern "C" fn rust_gc_is_gc_in_progress_helper(_b_consider_gc_start: bool) -
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_gc_initialize(gc_to_clr_source: *const IGcToClr) -> HResult {
+pub unsafe extern "C" fn rust_gc_initialize(gc_to_clr_source: &GcToClr) -> HResult {
     log_info!("rust_gc_initialize()");
 
     let limit = match std::env::var("ZERO_GC_LIMIT_BYTES") {
@@ -155,13 +155,7 @@ pub unsafe extern "C" fn rust_gc_initialize(gc_to_clr_source: *const IGcToClr) -
     };
     let _ = LIMIT_BYTES.set(limit);
 
-    // SAFETY: CoreCLR supplies a readable callback table whose context has
-    // process lifetime. Installation copies the table rather than retaining
-    // this pointer to the shim's temporary record.
-    if let Err(error) = unsafe { install_gc_to_clr(gc_to_clr_source) } {
-        return error;
-    }
-    let gc_to_clr = gc_to_clr().expect("callback table was just installed");
+    let gc_to_clr = install_gc_to_clr(gc_to_clr_source);
 
     // Study-only ZeroGC: retain all objects forever and disable card marking.
     // An empty heap range makes checked stores and bulk reference copies skip
@@ -194,7 +188,8 @@ pub unsafe extern "C" fn rust_gc_initialize(gc_to_clr_source: *const IGcToClr) -
     // SAFETY: CoreCLR supplied this callback object and Initialize runs while
     // the runtime is suspended. Table storage has process lifetime; the empty
     // ranges prevent indexing it and their sentinel bounds are never accessed.
-    unsafe { gc_to_clr.stomp_write_barrier(&mut parameters) }
+    unsafe { gc_to_clr.stomp_write_barrier(&mut parameters) };
+    S_OK
 }
 
 /// Dummy Windows x64 allocator. Storage is zeroed and retained forever.
@@ -245,18 +240,10 @@ fn object_layout(size: usize) -> Option<Layout> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime::E_POINTER;
 
     #[test]
     fn loader_probe_succeeds() {
         assert_eq!(rust_gc_loader_probe(), S_OK);
-    }
-
-    #[test]
-    fn loader_initialize_dummy_ok() {
-        // The actual initialization path is covered with a fake IGCToCLR in
-        // runtime.rs; a missing runtime callback is rejected deterministically.
-        assert_eq!(unsafe { rust_gc_initialize(ptr::null_mut()) }, E_POINTER);
     }
 
     #[test]

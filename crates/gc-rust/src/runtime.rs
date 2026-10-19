@@ -4,8 +4,15 @@ use std::sync::OnceLock;
 pub type HResult = u32;
 
 pub const S_OK: HResult = 0;
-pub const E_POINTER: HResult = 0x8000_4003;
-pub const E_UNEXPECTED: HResult = 0x8000_FFFF;
+
+/// Reasons for which the runtime might suspend the execution environment (EE).
+/// See `SUSPEND_REASON` in the pinned `gcinterface.h`.
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SuspendReason {
+    SuspendForGc = 1,
+    SuspendForGcPrep = 6,
+}
 
 /// CoreCLR operation used to configure or update its managed write barrier.
 ///
@@ -45,26 +52,21 @@ pub struct WriteBarrierParameters {
 }
 
 type StompWriteBarrierFunc =
-    unsafe extern "C" fn(context: *mut c_void, parameters: *mut WriteBarrierParameters) -> HResult;
+    unsafe extern "C" fn(context: *mut c_void, parameters: *mut WriteBarrierParameters);
+type SuspendEeFunc = unsafe extern "C" fn(context: *mut c_void, reason: SuspendReason);
+type RestartEeFunc = unsafe extern "C" fn(context: *mut c_void, finished_gc: bool);
 
 /// C ABI callback table through which Rust asks CoreCLR to perform EE work.
 ///
-/// The context and callbacks are created by the C++ shim. Add callbacks only
-/// when the collector needs them; unneeded `IGCToCLR` methods intentionally do
-/// not occupy ABI slots here. Future candidates include `SuspendEE`,
-/// `RestartEE`, `GcScanRoots`, `GcEnumAllocContexts`, finalization notification,
-/// configuration access, diagnostics, and event reporting.
+/// The pinned C++ shim supplies a live context and all callbacks. Rust copies
+/// this table at initialization; there is no separate validated representation.
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct IGcToClr {
-    context: *mut c_void,
-    stomp_write_barrier: Option<StompWriteBarrierFunc>,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct GcToClr {
+pub struct GcToClr {
     context: *mut c_void,
     stomp_write_barrier: StompWriteBarrierFunc,
+    suspend_ee: SuspendEeFunc,
+    restart_ee: RestartEeFunc,
 }
 
 // CoreCLR owns `context` for the process lifetime and its IGCToCLR methods are
@@ -77,115 +79,88 @@ unsafe impl Sync for GcToClr {}
 static GC_TO_CLR: OnceLock<GcToClr> = OnceLock::new();
 
 impl GcToClr {
-    /// Asks the C++ shim to validate and install write-barrier state.
+    /// Asks CoreCLR to install write-barrier state.
     ///
     /// # Safety
     ///
-    /// The context must have been supplied by the shim and must remain live for
-    /// the duration of the process.
-    pub unsafe fn stomp_write_barrier(&self, parameters: &mut WriteBarrierParameters) -> HResult {
-        // SAFETY: the caller guarantees the callback and context came from the
-        // shim; `parameters` remains exclusively borrowed until it returns.
+    /// The callbacks and context must be live, and `parameters` must describe
+    /// valid barrier state with the suspension required by CoreCLR.
+    pub unsafe fn stomp_write_barrier(&self, parameters: &mut WriteBarrierParameters) {
+        // SAFETY: the caller guarantees valid runtime state and parameters.
         unsafe { (self.stomp_write_barrier)(self.context, parameters) }
     }
-}
 
-/// Copies and installs CoreCLR's process-lifetime callback table exactly once.
-///
-/// Reinstalling the identical table is harmless; attempting to replace it with
-/// a different runtime object or callback is rejected.
-///
-/// # Safety
-///
-/// `source` must either be null or point to a readable `IGcToClr` supplied by
-/// the native shim. Its context must remain valid for the process lifetime.
-pub(crate) unsafe fn install_gc_to_clr(source: *const IGcToClr) -> Result<(), HResult> {
-    // SAFETY: this function has the same source-pointer contract as the helper.
-    unsafe { install_gc_to_clr_in(&GC_TO_CLR, source) }.map(|_| ())
-}
-
-/// Returns the process-wide callback table after successful installation.
-pub(crate) fn gc_to_clr() -> Option<&'static GcToClr> {
-    GC_TO_CLR.get()
-}
-
-unsafe fn install_gc_to_clr_in(
-    destination: &OnceLock<GcToClr>,
-    source: *const IGcToClr,
-) -> Result<&GcToClr, HResult> {
-    // SAFETY: the caller guarantees that any non-null source is readable.
-    let Some(source) = (unsafe { source.as_ref() }) else {
-        return Err(E_POINTER);
-    };
-    let Some(stomp_write_barrier) = source.stomp_write_barrier else {
-        return Err(E_POINTER);
-    };
-    if source.context.is_null() {
-        return Err(E_POINTER);
+    /// Suspends the EE on a thread allowed to initiate GC suspension.
+    ///
+    /// # Safety
+    ///
+    /// The runtime must be initialized, with no suspension already owned by
+    /// this caller. The caller must restart the EE on the same thread.
+    pub unsafe fn suspend_ee(&self, reason: SuspendReason) {
+        // SAFETY: the caller guarantees the runtime's suspension preconditions.
+        unsafe { (self.suspend_ee)(self.context, reason) }
     }
 
-    let candidate = GcToClr {
-        context: source.context,
-        stomp_write_barrier,
-    };
-    if destination.set(candidate).is_ok() {
-        return Ok(destination.get().expect("OnceLock was just initialized"));
-    }
-
-    let installed = destination.get().expect("OnceLock rejected initialization");
-    if installed.context == candidate.context
-        && std::ptr::fn_addr_eq(installed.stomp_write_barrier, candidate.stomp_write_barrier)
-    {
-        Ok(installed)
-    } else {
-        Err(E_UNEXPECTED)
+    /// Resumes the EE after a matching suspension.
+    ///
+    /// # Safety
+    ///
+    /// The caller must own the suspension on this thread. `finished_gc` must
+    /// indicate whether a collection actually completed.
+    pub unsafe fn restart_ee(&self, finished_gc: bool) {
+        // SAFETY: the caller owns the suspension and supplies its completion state.
+        unsafe { (self.restart_ee)(self.context, finished_gc) }
     }
 }
 
-// Keep these Windows x64 checks synchronized with the bridge declarations in
-// rust_gc.h. These are C ABI layouts rather than C++ class/vtable layouts.
+/// Copies the shim's temporary table during heap initialization.
+pub(crate) fn install_gc_to_clr(source: &GcToClr) -> &'static GcToClr {
+    GC_TO_CLR.get_or_init(|| *source)
+}
+
+pub(crate) fn gc_to_clr() -> &'static GcToClr {
+    GC_TO_CLR.get().expect("GC callbacks are not initialized")
+}
+
+// Basic Windows x64 layout checks, mirrored in the pinned C++ shim.
 #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
 const _: () = {
     assert!(size_of::<bool>() == 1);
     assert!(size_of::<WriteBarrierOp>() == 4);
     assert!(size_of::<WriteBarrierParameters>() == 80);
     assert!(align_of::<WriteBarrierParameters>() == 8);
-    assert!(std::mem::offset_of!(WriteBarrierParameters, operation) == 0);
-    assert!(std::mem::offset_of!(WriteBarrierParameters, is_runtime_suspended) == 4);
-    assert!(std::mem::offset_of!(WriteBarrierParameters, requires_upper_bounds_check) == 5);
-    assert!(std::mem::offset_of!(WriteBarrierParameters, card_table) == 8);
-    assert!(std::mem::offset_of!(WriteBarrierParameters, card_bundle_table) == 16);
-    assert!(std::mem::offset_of!(WriteBarrierParameters, lowest_address) == 24);
-    assert!(std::mem::offset_of!(WriteBarrierParameters, highest_address) == 32);
-    assert!(std::mem::offset_of!(WriteBarrierParameters, ephemeral_low) == 40);
-    assert!(std::mem::offset_of!(WriteBarrierParameters, ephemeral_high) == 48);
-    assert!(std::mem::offset_of!(WriteBarrierParameters, write_watch_table) == 56);
-    assert!(std::mem::offset_of!(WriteBarrierParameters, region_to_generation_table) == 64);
-    assert!(std::mem::offset_of!(WriteBarrierParameters, region_shr) == 72);
-    assert!(std::mem::offset_of!(WriteBarrierParameters, region_use_bitwise_write_barrier) == 73);
-    assert!(size_of::<IGcToClr>() == 16);
-    assert!(align_of::<IGcToClr>() == 8);
-    assert!(std::mem::offset_of!(IGcToClr, context) == 0);
-    assert!(std::mem::offset_of!(IGcToClr, stomp_write_barrier) == 8);
+    assert!(size_of::<SuspendReason>() == 4);
+    assert!(size_of::<GcToClr>() == 32);
+    assert!(align_of::<GcToClr>() == 8);
 };
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-    static CALLED: AtomicBool = AtomicBool::new(false);
-    static OPERATION: AtomicUsize = AtomicUsize::new(usize::MAX);
+    #[derive(Default)]
+    struct Calls {
+        operation: Option<WriteBarrierOp>,
+        reason: Option<SuspendReason>,
+        finished_gc: Option<bool>,
+    }
 
     unsafe extern "C" fn record_stomp(
-        _context: *mut c_void,
+        context: *mut c_void,
         parameters: *mut WriteBarrierParameters,
-    ) -> HResult {
-        // SAFETY: the test passes a live initialized parameter record.
-        let parameters = unsafe { &*parameters };
-        OPERATION.store(parameters.operation as usize, Ordering::Relaxed);
-        CALLED.store(true, Ordering::Release);
-        S_OK
+    ) {
+        // SAFETY: the test supplies exclusive access to both records.
+        unsafe { (*context.cast::<Calls>()).operation = Some((*parameters).operation) };
+    }
+
+    unsafe extern "C" fn record_suspend(context: *mut c_void, reason: SuspendReason) {
+        // SAFETY: the test supplies exclusive access to its context.
+        unsafe { (*context.cast::<Calls>()).reason = Some(reason) };
+    }
+
+    unsafe extern "C" fn record_restart(context: *mut c_void, finished_gc: bool) {
+        // SAFETY: the test supplies exclusive access to its context.
+        unsafe { (*context.cast::<Calls>()).finished_gc = Some(finished_gc) };
     }
 
     fn parameters() -> WriteBarrierParameters {
@@ -207,73 +182,24 @@ mod tests {
     }
 
     #[test]
-    fn dispatches_stomp_write_barrier_through_c_callback() {
-        CALLED.store(false, Ordering::Relaxed);
-        OPERATION.store(usize::MAX, Ordering::Relaxed);
-
-        let source = IGcToClr {
-            context: std::ptr::dangling_mut::<u8>().cast(),
-            stomp_write_barrier: Some(record_stomp),
-        };
-        let destination = OnceLock::new();
-
-        // SAFETY: the source remains readable for installation, and the
-        // callback does not dereference its non-null test context.
-        let gc_to_clr = unsafe { install_gc_to_clr_in(&destination, &raw const source) }.unwrap();
-        let result = unsafe { gc_to_clr.stomp_write_barrier(&mut parameters()) };
-
-        assert_eq!(result, S_OK);
-        assert!(CALLED.load(Ordering::Acquire));
-        assert_eq!(
-            OPERATION.load(Ordering::Relaxed),
-            WriteBarrierOp::Initialize as usize
-        );
-    }
-
-    #[test]
-    fn rejects_missing_callback_or_context() {
-        let destination = OnceLock::new();
-        let missing_callback = IGcToClr {
-            context: std::ptr::dangling_mut::<u8>().cast(),
-            stomp_write_barrier: None,
-        };
-        let missing_context = IGcToClr {
-            context: std::ptr::null_mut(),
-            stomp_write_barrier: Some(record_stomp),
+    fn dispatches_callbacks_with_context_and_arguments() {
+        let mut calls = Calls::default();
+        let gc_to_clr = GcToClr {
+            context: (&raw mut calls).cast(),
+            stomp_write_barrier: record_stomp,
+            suspend_ee: record_suspend,
+            restart_ee: record_restart,
         };
 
-        // SAFETY: both source records remain readable during installation.
-        assert!(matches!(
-            unsafe { install_gc_to_clr_in(&destination, &raw const missing_callback) },
-            Err(E_POINTER)
-        ));
-        // SAFETY: both source records remain readable during installation.
-        assert!(matches!(
-            unsafe { install_gc_to_clr_in(&destination, &raw const missing_context) },
-            Err(E_POINTER)
-        ));
-    }
+        // SAFETY: these callbacks only record arguments in the live test context.
+        unsafe {
+            gc_to_clr.stomp_write_barrier(&mut parameters());
+            gc_to_clr.suspend_ee(SuspendReason::SuspendForGc);
+            gc_to_clr.restart_ee(false);
+        }
 
-    #[test]
-    fn accepts_identical_reinstall_and_rejects_replacement() {
-        let destination = OnceLock::new();
-        let source = IGcToClr {
-            context: std::ptr::dangling_mut::<u8>().cast(),
-            stomp_write_barrier: Some(record_stomp),
-        };
-        let replacement = IGcToClr {
-            context: std::ptr::dangling_mut::<u16>().cast(),
-            stomp_write_barrier: Some(record_stomp),
-        };
-
-        // SAFETY: all source records remain readable during installation.
-        assert!(unsafe { install_gc_to_clr_in(&destination, &raw const source) }.is_ok());
-        // SAFETY: all source records remain readable during installation.
-        assert!(unsafe { install_gc_to_clr_in(&destination, &raw const source) }.is_ok());
-        // SAFETY: all source records remain readable during installation.
-        assert!(matches!(
-            unsafe { install_gc_to_clr_in(&destination, &raw const replacement) },
-            Err(E_UNEXPECTED)
-        ));
+        assert_eq!(calls.operation, Some(WriteBarrierOp::Initialize));
+        assert_eq!(calls.reason, Some(SuspendReason::SuspendForGc));
+        assert_eq!(calls.finished_gc, Some(false));
     }
 }

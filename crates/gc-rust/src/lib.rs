@@ -9,4 +9,5 @@ pub mod object;
 pub mod platform;
 pub mod runtime;
 mod segment;
+mod suspend;
 mod util;

@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 if (args.Length != 4)
 {
@@ -58,6 +59,11 @@ static void Observe(string name, string[] labels, Node[] nodes, Node[] roots, st
     }
 
     Console.WriteLine($"fixture {name} observation declared-only raw-handoff=unsupported");
+    // The stock-GC comparison has neither our DLL path nor initialized callbacks.
+    if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_GCPath")))
+    {
+        RustGcNative.SuspendEE();
+    }
     // Interpolated handlers use ArrayPool/ConditionalWeakTable on this runtime;
     // ZeroGC does not implement the dependent handles needed by that path.
     Console.WriteLine(string.Join(' ', "graph", name, edges, rootLabels, actualLive));
@@ -68,4 +74,13 @@ static void Observe(string name, string[] labels, Node[] nodes, Node[] roots, st
 sealed class Node
 {
     public Node? Next;
+}
+
+static partial class RustGcNative
+{
+    [LibraryImport("gc_rust", EntryPoint = "rust_gc_suspend_ee")]
+    public static partial void SuspendEE();
+
+    [LibraryImport("gc_rust", EntryPoint = "rust_gc_restart_ee")]
+    public static partial void RestartEE();
 }

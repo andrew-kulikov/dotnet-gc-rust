@@ -440,6 +440,11 @@ It does not call back into our Rust code on every reference write.
 
 The C++ shim owns the C++ virtual-call ABI. Rust stores a context and a
 C-compatible callback rather than reconstructing the `IGCToCLR` vtable.
+The shim fills every callback in `GcToClr`; Rust copies that table once during
+initialization. Both sides target the same pinned runtime, so the bridge does
+not validate null callbacks or translate the runtime's `void` return into an
+artificial error code. Its `noexcept` C++ adapters terminate if an exception
+occurs, preventing unwinding through Rust.
 
 The current additional parameters are: no region table, `region_shr = 0`,
 bitwise region barriers disabled, no write-watch table, and

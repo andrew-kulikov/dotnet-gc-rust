@@ -60,8 +60,8 @@ def check_managed_result(
         )
 
 
-def check(stock_only: bool = False) -> None:
-    path = REPOSITORY_ROOT / "samples/GraphFixtures/scenarios.txt"
+def check(stock_only: bool = False, scenario: str = "scenarios") -> None:
+    path = REPOSITORY_ROOT / f"samples/GraphFixtures/{scenario}.txt"
     fixtures = load_fixtures(path)
     environment = workstation_environment()
     check_model(path, fixtures, environment)
@@ -95,11 +95,14 @@ def main() -> int:
     parser.add_argument(
         "--stock-only", action="store_true", help="explicitly skip Windows ZeroGC"
     )
+    parser.add_argument(
+        "--scenario", default="scenarios", help="specify the sample to build and run"
+    )
     arguments = parser.parse_args()
     if arguments.log_level is not None:
         os.environ["RUST_GC_LOG_LEVEL"] = arguments.log_level
     try:
-        check(arguments.stock_only)
+        check(arguments.stock_only, arguments.scenario)
     except (OSError, RuntimeError, subprocess.SubprocessError) as error:
         log(f"error: {error}", is_error=True)
         return 1
