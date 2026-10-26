@@ -10,7 +10,29 @@ python scripts/build.py matrix --report-dir out/matrix
 python scripts/build.py miri
 python scripts/graph_fixtures.py
 python scripts/graph_fixtures.py --stock-only
+python scripts/graph_fixtures.py --fixture chain
+python scripts/graph_fixtures.py --fixture chain --suspend
 ```
+
+`--fixture` selects one named graph from the fixture file in both the Rust
+model and managed runs. `--scenario` selects the file stem (default `scenarios`).
+`--suspend` adds one empty diagnostic cycle in ZeroGC; stock GC still checks the
+declared graph. Omit `--fixture` to run every fixture. Suspension logs have a
+`.zerogc.suspend` suffix under `out/graph-fixtures/`. See the
+[first-cycle notes](../docs/08-suspension-lifecycle/02-empty-cycle.md) for scope
+and individual Rust test commands.
+
+The graph runner uses plain headings and always shows process stdout/stderr.
+There is no quiet/verbose mode or computed run/cycle summary. `run_process()`
+prints the output, checks the exit code, and returns its lines (stdout first,
+then stderr). Raw model and managed output is also saved as separate
+`*.stdout.log` / `*.stderr.log` files under `out/graph-fixtures/`.
+
+Output comparisons only check the mission checkpoint: model live sets, the
+expected graph/roots, ordered construction/observation/continuation records,
+the optional suspension result, and the correct GC initialization. They do not
+extract allocation counters or timing metrics. Managed runs retain a 30-second
+timeout; the model command may build Rust code, so it has no process timeout.
 
 Both entry points accept `--log-level error|warn|info|debug|trace` to set Rust
 collector verbosity for child processes. For `build.py`, put this top-level
@@ -25,7 +47,7 @@ python scripts/graph_fixtures.py --log-level trace
 Levels are case-insensitive. An explicit option overrides `RUST_GC_LOG_LEVEL`;
 omitting it preserves the inherited value, with the Rust logger defaulting to
 `info` when the variable is missing or invalid. This option controls Rust logs;
-Python progress messages and tool output remain visible.
+Python headings, command lines, and process output remain visible.
 
 The runner colors its own errors and replayed stderr red, and command lines
 green, when the corresponding output stream is a terminal. Redirected output

@@ -23,15 +23,17 @@ the reports elsewhere.
 | Minimal smoke | works | works | `IGCHeap::Shutdown` reports counters |
 | Small-object churn | works | works | 512 arrays of 128 bytes |
 | One large array | works | unsupported by named method | `IGCHeap::GetLOHThreshold` |
-| Two allocating threads | works | unsupported by named method | `IGCHeap::FixAllocContext` |
+| Two allocating threads | works | works | Slow allocation; empty contexts accepted at thread exit |
 | Pinned buffer | works | works | Pinned `GCHandle` exposes a non-null address |
 | Finalization registration | works | unsupported by named method | `IGCHeap::RegisterForFinalization` via `GC.ReRegisterForFinalize` |
 | Bounded exhaustion | works | deterministic exhaustion | `IGCHeap::Alloc` rejects the request at `ZERO_GC_LIMIT_BYTES=1048576` |
 
 There are no unexpected defects in this matrix. An unsupported result is a
 native abort with the method name, not a successful stub. The two-thread case
-can print `FixAllocContext` twice because both threads may enter it before the
-first abort terminates the process. The matrix checks the last named call.
+now completes: `FixAllocContext` checks the slow allocator's empty-context
+invariant at thread exit. This does not establish repeated suspension with a
+second running mutator. For unsupported scenarios, the matrix checks the last
+named call.
 
 `ZERO_GC_LIMIT_BYTES` is a positive decimal byte limit for managed-object
 storage; omitted means 64 MiB. A request is counted when `IGCHeap::Alloc` enters.

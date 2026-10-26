@@ -47,6 +47,13 @@ extern "C" void rust_gc_set_finalization_run(RustGCObject obj) noexcept;
 extern "C" unsigned rust_gc_get_max_generation() noexcept;
 extern "C" int rust_gc_collection_count(int generation, int get_bgc_fgc_coutn) noexcept;
 extern "C" bool rust_gc_is_gc_in_progress_helper(bool bConsiderGCStart) noexcept;
+extern "C" unsigned rust_gc_get_gc_count() noexcept;
+extern "C" void rust_gc_set_gc_in_progress(bool value) noexcept;
+extern "C" void rust_gc_set_suspension_pending(bool value) noexcept;
+extern "C" void rust_gc_set_wait_for_gc_event() noexcept;
+extern "C" void rust_gc_reset_wait_for_gc_event() noexcept;
+extern "C" std::uint32_t rust_gc_wait_until_gc_complete(bool consider_gc_start) noexcept;
+extern "C" void rust_gc_fix_alloc_context(const gc_alloc_context* acontext) noexcept;
 extern "C" void rust_gc_shutdown() noexcept;
 extern "C" void rust_gc_report() noexcept;
 

@@ -6,6 +6,11 @@ From the repository root, run the full Windows x64 checkpoint:
 python scripts/graph_fixtures.py
 ```
 
+For one fixture use `--fixture chain`. Add `--suspend` to run a single empty
+diagnostic cycle under ZeroGC with status and restart-count checks.
+See [the first-cycle result](../../docs/08-suspension-lifecycle/02-empty-cycle.md).
+The default command keeps the Mission 07 declared-observation baseline.
+
 This checks the Rust model, builds the managed sample and existing ZeroGC shim,
 then runs each scenario in a fresh process under stock workstation GC and ZeroGC.
 Every supported run must export the exact graph, roots, and expected live labels

@@ -1,64 +1,47 @@
 # Mission 08: suspension lifecycle
 
-This folder develops the implementation plan for
-[Mission 08](../../tasks/08-suspension-lifecycle.md). The mission establishes a
-safe interval for native diagnostics: stop managed execution, perform bounded
-work, and attempt restart exactly once after each successful suspension.
+[Mission 08](../../tasks/08-suspension-lifecycle.md) establishes a safe interval
+for native diagnostics: stop managed execution, perform bounded work, and
+attempt restart exactly once after each successful suspension.
 
-The first operation may be empty. Object decoding, root scanning, tracing,
-reclamation, and allocation fast paths belong to later missions.
+The diagnostic operation is initially empty. Object decoding, root scanning,
+tracing, reclamation, and allocation fast paths belong to later missions.
 
-## Start here
+## Chapters
 
-Read [01: establish the starting point and suspension contract](01-observe-first.md).
-It explains what exists, what we need to learn, which sources to read, and which
-experiments to try before designing the implementation.
+1. [The suspension contract](01-observe-first.md) explains the managed baseline,
+   the pinned CoreCLR interface, thread ownership, and reference lifetimes.
+2. [The first empty cycle](02-empty-cycle.md) describes the implementation,
+   required callbacks, validation commands, and remaining work.
 
-Status: planning and source inspection. The Mission 08 checkpoint has not been
-run or passed as part of writing these documents. Existing mission checkboxes
-remain unchanged.
+## Current state
 
-## Working plan
+The `chain` fixture completes one empty suspension cycle under ZeroGC, makes
+one restart attempt, and returns to managed execution. Native tests cover
+lifecycle failures and completion-event behavior. The existing bounded
+`LoaderSmoke threads` scenario also passes, exercising thread-exit cleanup.
 
-Only step 1 currently has a detailed subdocument. Expand the other steps when
-the preceding observations make their requirements concrete.
+Mission 08 is still incomplete. Repeated suspension with a second active managed
+mutator and handle handoff remain unvalidated.
 
-| Step | Question or outcome | Document |
+## Plan
+
+| Step | Outcome | State |
 | --- | --- | --- |
-| 1 | What works today, and what does the pinned runtime require to stop and restart? | [Observe first](01-observe-first.md) |
-| 2 | Who owns the cycle, rejects re-entry, and guarantees one restart attempt? | To be developed: lifecycle owner and tests |
-| 3 | How do Rust and CoreCLR call each other through the C++ shim? | To be developed: minimal C ABI bridge |
-| 4 | Which GC callbacks must work during suspension, waiting, and thread exit? | To be developed: runtime callback semantics |
-| 5 | How does the managed fixture lend supported references to native diagnostics? | To be developed: handles and borrowed lifetimes |
-| 6 | How do failures preserve cleanup and make restart failure observable? | To be developed: failure injection and reporting |
-| 7 | Does managed execution continue with one mutator and repeated cycles with two? | To be developed: managed experiments |
-| 8 | Which reproducible command proves the mission checkpoint? | To be developed: runner, regression checks, and evidence |
+| 1 | Establish the managed baseline and CoreCLR contract | Documented in chapter 1 |
+| 2 | Give one owner responsibility for the lifecycle and restart | Implemented and unit-tested |
+| 3 | Connect the managed entry, C++ shim, and Rust cycle | One empty cycle validated |
+| 4 | Implement required state, waiting, and allocation-context callbacks | Implemented; managed waiting during repeated cycles remains unvalidated |
+| 5 | Validate handle handoff and borrowed-reference lifetimes | Pending |
+| 6 | Validate failure cleanup and restart-failure reporting | Native tests pass; full checkpoint pending |
+| 7 | Demonstrate repeated cycles with two bounded mutators | Next experiment |
+| 8 | Provide a reproducible full Mission 08 checkpoint | Pending |
 
-```mermaid
-flowchart TD
-    A[Read the current code and reproduce Mission 07] --> B[Write down the runtime contract]
-    B --> C[Test a lifecycle owner without CoreCLR]
-    C --> D[Add the bridge and required GC callbacks]
-    D --> E[Run one empty diagnostic cycle]
-    E --> F[Validate handle lifetime and injected failures]
-    F --> G[Repeat with two bounded mutators]
-    G --> H[Record checkpoint evidence and request review]
-```
+The next experiment repeats the empty cycle while a second bounded managed
+mutator runs. It must establish worker progress before and after suspension,
+successful managed continuation, and clean worker exit.
 
-The diagram shows dependencies, not separate architectural layers to complete
-in isolation. Bridge changes and required callbacks may need to land together
-to produce the first meaningful runtime experiment.
-
-## How to develop these documents
-
-- Keep the mission checkpoint as the specification.
-- Separate source facts, proposed choices, and measured observations.
-- Link to repository files and name the relevant function; line numbers can move.
-- Record a failed experiment and its smallest next action before expanding scope.
-- Give each new document a narrow question, an experiment, and an exit condition.
-- Keep local logs under `out/`; summarize portable findings in these documents.
-- Do not mark a claim as validated just because it has a diagram or a proposed test.
-
-See also the [mission workflow](../../tasks/README.md),
+See the [mission workflow](../../tasks/README.md),
 [review guide](../../tasks/REVIEW_GUIDE.md), and
-[fixture handoff contract](../../samples/GraphFixtures/README.md#pinned-runtime-handoff-contract).
+[fixture handoff contract](../../samples/GraphFixtures/README.md#pinned-runtime-handoff-contract)
+for the wider project requirements.

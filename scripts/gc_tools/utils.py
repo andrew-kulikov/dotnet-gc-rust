@@ -70,6 +70,7 @@ def run_scenario(
     *,
     env: dict[str, str],
     report_prefix: Path | None = None,
+    timeout: float | None = SCENARIO_TIMEOUT_SECONDS,
 ) -> subprocess.CompletedProcess[str]:
     """Capture a bounded scenario, saving both streams even when it fails."""
     result = run(
@@ -77,7 +78,7 @@ def run_scenario(
         env=env,
         capture_output=True,
         check=False,
-        timeout=SCENARIO_TIMEOUT_SECONDS,
+        timeout=timeout,
     )
     if report_prefix is not None:
         report_prefix.parent.mkdir(parents=True, exist_ok=True)

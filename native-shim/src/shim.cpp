@@ -364,27 +364,33 @@ public:
     {
         return rust_gc_is_gc_in_progress_helper(bConsiderGCStart);
     }
-    ABORTING_OVERRIDE(unsigned, GetGcCount, ())
+    unsigned GetGcCount() noexcept override
+    {
+        return rust_gc_get_gc_count();
+    }
     ABORTING_OVERRIDE(
         bool,
         IsThreadUsingAllocationContextHeap,
         (gc_alloc_context* acontext, int thread_number))
     ABORTING_OVERRIDE(bool, IsEphemeral, (Object* object))
-    ABORTING_OVERRIDE(
-        uint32_t,
-        WaitUntilGCComplete,
-        (bool bConsiderGCStart))
-    ABORTING_OVERRIDE(
-        void,
-        FixAllocContext,
-        (gc_alloc_context* acontext, void* arg, void* heap))
+    uint32_t WaitUntilGCComplete(bool bConsiderGCStart) noexcept override
+    {
+        return rust_gc_wait_until_gc_complete(bConsiderGCStart);
+    }
+    void FixAllocContext(gc_alloc_context* acontext, void*, void*) noexcept override
+    {
+        rust_gc_fix_alloc_context(acontext);
+    }
     ABORTING_OVERRIDE(size_t, GetCurrentObjSize, ())
-    ABORTING_OVERRIDE(void, SetGCInProgress, (bool fInProgress))
+    void SetGCInProgress(bool fInProgress) noexcept override
+    {
+        rust_gc_set_gc_in_progress(fInProgress);
+    }
     ABORTING_OVERRIDE(bool, RuntimeStructuresValid, ())
-    ABORTING_OVERRIDE(
-        void,
-        SetSuspensionPending,
-        (bool fSuspensionPending))
+    void SetSuspensionPending(bool fSuspensionPending) noexcept override
+    {
+        rust_gc_set_suspension_pending(fSuspensionPending);
+    }
     ABORTING_OVERRIDE(
         void,
         SetYieldProcessorScalingFactor,
@@ -424,8 +430,14 @@ public:
         // ZeroGC: object storage remains allocated forever and no concurrent
         // collector walks it, so publication currently has no state to update.
     }
-    ABORTING_OVERRIDE(void, SetWaitForGCEvent, ())
-    ABORTING_OVERRIDE(void, ResetWaitForGCEvent, ())
+    void SetWaitForGCEvent() noexcept override
+    {
+        rust_gc_set_wait_for_gc_event();
+    }
+    void ResetWaitForGCEvent() noexcept override
+    {
+        rust_gc_reset_wait_for_gc_event();
+    }
 
     ABORTING_OVERRIDE(bool, IsLargeObject, (Object* pObj))
     ABORTING_OVERRIDE(void, ValidateObjectMember, (Object* obj))

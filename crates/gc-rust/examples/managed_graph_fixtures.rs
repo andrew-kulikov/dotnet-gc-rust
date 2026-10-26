@@ -3,6 +3,8 @@ use std::{collections::HashMap, error::Error, fs};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let path = std::env::args().nth(1).ok_or("expected a fixture file")?;
+    let selected = std::env::args().nth(2);
+    let mut matched = false;
     let fixtures = fs::read_to_string(path)?;
     for line in fixtures.lines() {
         if line.trim().is_empty() || line.starts_with('#') {
@@ -12,7 +14,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         let [name, edges, roots, expected] = fields.as_slice() else {
             return Err("expected name, edges, roots, and live labels".into());
         };
+        if selected
+            .as_deref()
+            .is_some_and(|selected| selected != *name)
+        {
+            continue;
+        }
+        matched = true;
         check_fixture(name, edges, roots, expected)?;
+    }
+    if !matched {
+        return Err("no matching fixtures".into());
     }
     Ok(())
 }

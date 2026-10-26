@@ -20,7 +20,6 @@ LOADER_SMOKE_OUTPUT = "Hello, World!"
 SCENARIOS = ("smoke", "small", "large", "threads", "pin", "finalize", "exhaust")
 UNSUPPORTED_METHODS = {
     "large": "GetLOHThreshold",
-    "threads": "FixAllocContext",
     "finalize": "RegisterForFinalization",
 }
 DEFAULT_MATRIX_LIMIT_BYTES = 64 * 1024 * 1024

@@ -125,14 +125,35 @@ pub extern "C" fn rust_gc_get_max_generation() -> u32 {
 pub extern "C" fn rust_gc_collection_count(_generation: i32, _get_bgc_fgc_coutn: i32) -> i32 {
     // Zero GC does not perform any collections, so the count is always zero (for now).
     // TODO: Implement actual collection counting when more generations are added.
+    log_info!("rust_gc_collection_count()");
     0
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rust_gc_is_gc_in_progress_helper(_b_consider_gc_start: bool) -> bool {
-    // Zero GC never performs any collections, so GC is never in progress.
-    // TODO: Implement actual GC progress tracking when more generations are added.
-    false
+pub extern "C" fn rust_gc_get_gc_count() -> u32 {
+    // Diagnostic suspension is not a completed collection.
+    log_info!("rust_gc_get_gc_count()");
+    0
+}
+
+/// Validate the empty allocation-context invariant used by slow-only ZeroGC.
+/// There is no allocation tail to bind. An invariant violation terminates the
+/// process: a panic cannot unwind across this extern-C boundary.
+///
+/// # Safety
+/// A non-null pointer must reference a live context owned by the calling thread.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rust_gc_fix_alloc_context(context: *const GcAllocContext) {
+    log_info!("rust_gc_fix_alloc_context()");
+    // SAFETY: the runtime guarantees the lifetime and exclusive thread ownership.
+    let context = unsafe { context.as_ref() }.expect("FixAllocContext: null allocation context");
+    assert!(
+        context.alloc_ptr.is_null()
+            && context.alloc_limit.is_null()
+            && context.gc_reserved_1.is_null()
+            && context.gc_reserved_2.is_null(),
+        "FixAllocContext: slow-only ZeroGC requires an empty allocation context"
+    );
 }
 
 #[unsafe(no_mangle)]
@@ -244,6 +265,33 @@ mod tests {
     #[test]
     fn loader_probe_succeeds() {
         assert_eq!(rust_gc_loader_probe(), S_OK);
+    }
+
+    #[test]
+    fn fix_alloc_context_preserves_empty_context_and_counters() {
+        let context = GcAllocContext {
+            alloc_ptr: ptr::null_mut(),
+            alloc_limit: ptr::null_mut(),
+            alloc_bytes: 17,
+            alloc_bytes_uoh: 8,
+            gc_reserved_1: ptr::null_mut(),
+            gc_reserved_2: ptr::null_mut(),
+            alloc_count: 3,
+        };
+        // SAFETY: the test exclusively owns this live context.
+        unsafe { rust_gc_fix_alloc_context(&context) };
+        assert!(context.alloc_ptr.is_null());
+        assert!(context.alloc_limit.is_null());
+        assert!(context.gc_reserved_1.is_null());
+        assert!(context.gc_reserved_2.is_null());
+        assert_eq!(
+            (
+                context.alloc_bytes,
+                context.alloc_bytes_uoh,
+                context.alloc_count
+            ),
+            (17, 8, 3)
+        );
     }
 
     #[test]
