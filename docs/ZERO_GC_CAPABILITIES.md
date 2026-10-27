@@ -25,15 +25,19 @@ the reports elsewhere.
 | One large array | works | unsupported by named method | `IGCHeap::GetLOHThreshold` |
 | Two allocating threads | works | works | Slow allocation; empty contexts accepted at thread exit |
 | Pinned buffer | works | works | Pinned `GCHandle` exposes a non-null address |
+| Dependent handles | works | works | Creation, secondary updates, null-primary masking, and disposal |
 | Finalization registration | works | unsupported by named method | `IGCHeap::RegisterForFinalization` via `GC.ReRegisterForFinalize` |
 | Bounded exhaustion | works | deterministic exhaustion | `IGCHeap::Alloc` rejects the request at `ZERO_GC_LIMIT_BYTES=1048576` |
 
 There are no unexpected defects in this matrix. An unsupported result is a
 native abort with the method name, not a successful stub. The two-thread case
 now completes: `FixAllocContext` checks the slow allocator's empty-context
-invariant at thread exit. This does not establish repeated suspension with a
-second running mutator. For unsupported scenarios, the matrix checks the last
-named call.
+invariant at thread exit. Repeated suspension with a second running mutator is
+validated separately by the [Mission 08 checkpoint](08-suspension-lifecycle/04-handoff-checkpoint.md).
+For unsupported scenarios, the matrix checks the last named call.
+
+The [dependent-handle check](08-suspension-lifecycle/05-dependent-handles.md) also
+removes the need for formatting workarounds in managed fixtures.
 
 `ZERO_GC_LIMIT_BYTES` is a positive decimal byte limit for managed-object
 storage; omitted means 64 MiB. A request is counted when `IGCHeap::Alloc` enters.

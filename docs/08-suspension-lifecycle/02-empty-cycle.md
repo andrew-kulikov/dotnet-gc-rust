@@ -2,6 +2,10 @@
 
 [Mission overview](README.md) · [Previous: the suspension contract](01-observe-first.md)
 
+This chapter records the first-cycle milestone. The remaining work listed below
+was subsequently completed in [chapter 3](03-repeated-cycles.md) and
+[chapter 4](04-handoff-checkpoint.md).
+
 ZeroGC supports one synchronous empty diagnostic cycle from the managed fixture.
 The lifecycle owner, C++ bridge, and required GC callbacks form the first
 implemented part of Mission 08. This chapter describes that implementation and
@@ -110,11 +114,12 @@ The recorded run exited 0. It checked `chain` in the Rust model and under stock
 GC, then completed one empty diagnostic cycle under ZeroGC with these records:
 
 ```text
-dotnet: fixture 'chain' constructed
-dotnet: fixture 'chain' observation declared-only raw-handoff=unsupported
-dotnet: fixture 'chain' diagnostic suspension completed restart-attempts=1
-dotnet: graph 'chain' A:B,B:C,C:- A A,B,C
-dotnet: fixture 'chain' continuation
+dotnet: Managed execution was restarted once.
+dotnet: Graph 'chain':
+dotnet: Edges: A:B,B:C,C:-
+dotnet: Roots: A
+dotnet: Reachable nodes: A,B,C
+dotnet: Managed execution continued after 'chain'.
 ```
 
 The suspension record is printed after native return. Together with status 0,

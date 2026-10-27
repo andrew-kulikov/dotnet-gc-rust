@@ -1,4 +1,6 @@
+use crate::handle_store::{ObjectHandle, check_diagnostic_handle};
 use crate::runtime::{SuspendReason, gc_to_clr};
+use crate::util::log_info;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 #[repr(u8)]
@@ -128,6 +130,37 @@ const _: () = {
 /// with no managed monitor or native lock held that suspension may need.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_gc_suspend_ee() -> DiagnosticResult {
+    log_info!("rust_gc_suspend_ee()");
+    run_diagnostic(|| Ok(()))
+}
+
+/// Bounded handle-handoff probe; nonzero `fail_operation` injects an error after
+/// handle resolution, before restart. The result never contains an object pointer.
+/// An unexpected panic aborts at this extern-C boundary; it cannot unwind to C#.
+///
+/// # Safety
+/// All `rust_gc_suspend_ee` preconditions apply. `handle` must be a live normal
+/// GCHandle allocated by this ZeroGC instance, exclusively owned by the caller
+/// and kept unchanged until return. Stock-GC handles are unsupported.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rust_gc_suspend_with_handle(
+    handle: ObjectHandle,
+    fail_operation: u32,
+) -> DiagnosticResult {
+    log_info!(
+        "rust_gc_suspend_with_handle([{:?}], fail_operation: {})",
+        handle,
+        fail_operation
+    );
+    run_diagnostic(|| {
+        // SAFETY: the caller owns the live store handle and cannot change/free it
+        // during this synchronous call. Lifecycle invokes this only while stopped.
+        unsafe { check_diagnostic_handle(handle) }?;
+        if fail_operation == 0 { Ok(()) } else { Err(()) }
+    })
+}
+
+fn run_diagnostic(operation: impl FnOnce() -> Result<(), ()>) -> DiagnosticResult {
     let callbacks = gc_to_clr();
     let mut restart_attempts = 0;
     // CoreCLR methods return void. Only injected callbacks return Err; an abort
@@ -139,11 +172,11 @@ pub unsafe extern "C" fn rust_gc_suspend_ee() -> DiagnosticResult {
             unsafe { callbacks.suspend_ee(SuspendReason::SuspendForGcPrep) };
             Ok(())
         },
-        || Ok(()),
+        operation,
         || {
             restart_attempts += 1;
             // SAFETY: the local guard owns a successful suspension on this
-            // thread and attempts restart once, after the empty operation.
+            // thread and attempts restart once, after the bounded operation.
             // This diagnostic completes no collection.
             unsafe { callbacks.restart_ee(false) };
             Ok(())
@@ -243,24 +276,27 @@ mod tests {
 
     #[test]
     fn restart_error_is_reported_without_retry_and_blocks_next_cycle() {
-        let lifecycle = Lifecycle::new();
-        let restarts = Cell::new(0);
-        assert_eq!(
-            lifecycle.run(
-                || Ok(()),
-                || Err(()),
-                || {
-                    restarts.set(restarts.get() + 1);
-                    Err(())
-                }
-            ),
-            Status::RestartFailed
-        );
-        assert_eq!(
-            lifecycle.run(|| Ok(()), || Ok(()), || Ok(())),
-            Status::Rejected
-        );
-        assert_eq!(restarts.get(), 1);
+        for operation_result in [Ok(()), Err(())] {
+            let lifecycle = Lifecycle::new();
+            let restarts = Cell::new(0);
+            assert_eq!(
+                lifecycle.run(
+                    || Ok(()),
+                    || operation_result,
+                    || {
+                        restarts.set(restarts.get() + 1);
+                        Err(())
+                    }
+                ),
+                Status::RestartFailed
+            );
+            assert_eq!(lifecycle.state.load(Ordering::Acquire), State::Failed as u8);
+            assert_eq!(
+                lifecycle.run(|| Ok(()), || Ok(()), || Ok(())),
+                Status::Rejected
+            );
+            assert_eq!(restarts.get(), 1);
+        }
     }
 
     #[test]

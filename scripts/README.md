@@ -12,6 +12,7 @@ python scripts/graph_fixtures.py
 python scripts/graph_fixtures.py --stock-only
 python scripts/graph_fixtures.py --fixture chain
 python scripts/graph_fixtures.py --fixture chain --suspend
+python scripts/graph_fixtures.py --suspend-repeat
 ```
 
 `--fixture` selects one named graph from the fixture file in both the Rust
@@ -22,6 +23,14 @@ declared graph. Omit `--fixture` to run every fixture. Suspension logs have a
 [first-cycle notes](../docs/08-suspension-lifecycle/02-empty-cycle.md) for scope
 and individual Rust test commands.
 
+`--suspend-repeat` checks one normal-handle handoff with one mutator, then eight
+cycles with a second bounded mutator. Cycle 4 injects a post-suspend operation
+error; all cycles must restart once and show worker progress afterward. The
+runner checks worker exit, handle release, graph output, and continuation too.
+It is mutually exclusive with `--suspend` and cannot be combined with
+`--stock-only`. Logs use `.zerogc.suspend-repeat`; see the
+[completed Mission 08 checkpoint](../docs/08-suspension-lifecycle/04-handoff-checkpoint.md).
+
 The graph runner uses plain headings and always shows process stdout/stderr.
 There is no quiet/verbose mode or computed run/cycle summary. `run_process()`
 prints the output, checks the exit code, and returns its lines (stdout first,
@@ -29,8 +38,8 @@ then stderr). Raw model and managed output is also saved as separate
 `*.stdout.log` / `*.stderr.log` files under `out/graph-fixtures/`.
 
 Output comparisons only check the mission checkpoint: model live sets, the
-expected graph/roots, ordered construction/observation/continuation records,
-the optional suspension result, and the correct GC initialization. They do not
+expected graph/roots, readable graph/continuation messages in order,
+the optional suspension results, and the correct GC initialization. They do not
 extract allocation counters or timing metrics. Managed runs retain a 30-second
 timeout; the model command may build Rust code, so it has no process timeout.
 

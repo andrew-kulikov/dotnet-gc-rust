@@ -17,7 +17,7 @@ SERVER_GC_DIAGNOSTIC = (
 )
 LOADER_SMOKE_OUTPUT = "Hello, World!"
 
-SCENARIOS = ("smoke", "small", "large", "threads", "pin", "finalize", "exhaust")
+SCENARIOS = ("smoke", "small", "large", "threads", "pin", "dependent", "finalize", "exhaust")
 UNSUPPORTED_METHODS = {
     "large": "GetLOHThreshold",
     "finalize": "RegisterForFinalization",

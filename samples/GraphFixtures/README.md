@@ -9,6 +9,10 @@ python scripts/graph_fixtures.py
 For one fixture use `--fixture chain`. Add `--suspend` to run a single empty
 diagnostic cycle under ZeroGC with status and restart-count checks.
 See [the first-cycle result](../../docs/08-suspension-lifecycle/02-empty-cycle.md).
+Use `--suspend-repeat` for the complete Mission 08 runtime probe: normal-handle
+handoff, eight cycles with two mutators, an injected operation error, exactly one
+restart per cycle, worker progress/exit, handle release, and continuation.
+See [the checkpoint](../../docs/08-suspension-lifecycle/04-handoff-checkpoint.md).
 The default command keeps the Mission 07 declared-observation baseline.
 
 This checks the Rust model, builds the managed sample and existing ZeroGC shim,
@@ -50,15 +54,9 @@ but equally reachable graph cannot pass. Rust builds the same logical graph
 using `Graph`, checks marking against the oracle, then sweeps.
 No collector implementation or external parsing package is added.
 
-The Windows run exposed an unrelated dependency in transcript formatting:
-the multi-part interpolated string handler rents/returns an `ArrayPool<char>`
-buffer, whose thread-local tracking uses `ConditionalWeakTable` and reaches
-ZeroGC's unsupported `CreateDependentHandle`. The graph record uses a direct
-`string.Join` instead; dependent runtime handles remain outside this mission.
-
-Ordered markers: `constructed`, `observation declared-only
-raw-handoff=unsupported`, the `graph` record, and `continuation`.
-The observation marker is a capability statement, not a native operation.
+The runner checks readable result lines in order: the graph's edges/roots/reachable
+nodes and managed continuation. Suspension options add handle, cycle, restart, worker
+progress, and cleanup messages. Every message follows its corresponding check.
 Arrays remain rooted through `GC.KeepAlive` after observation and continuation.
 This deliberately retains disconnected nodes: fixture roots are a chosen input
 to graph reachability, not an inventory of CoreCLR roots. An empty explicit
@@ -68,14 +66,15 @@ root set does not assert that stock GC has collected those objects.
 
 Target: Windows x64 workstation CoreCLR 10.0.11, SDK 10.0.400, and
 `external/dotnet-runtime` at `79d0c463f1b55624c874a11585f7e47731e8d675`.
-This describes the future diagnostic handoff. Mission 07 implements **no
-raw-reference handoff or native memory read**. Both collectors support declared
-managed observation here; both raw-handoff paths are explicitly unsupported.
+Mission 07's default mode implements **no raw-reference handoff or native memory
+read**. Mission 08's `--suspend-repeat` verifies one ZeroGC-owned normal handle
+without reading managed object memory. Stock GC checks only declared managed
+observation; its native handoff remains unsupported.
 
 1. Keep objects and explicit roots strongly reachable for the entire synchronous
    diagnostic call. `GC.KeepAlive` extends lifetime, not address stability;
    it does not freeze `Next` or stop another thread.
-2. For the next mission, use owned normal `GCHandle` roots and pass only their
+2. Use owned normal `GCHandle` roots and pass only their
    `GCHandle.ToIntPtr` tokens through an ordinary GC-transitioning P/Invoke.
    A token is an opaque handle, **not an object address**. Allocate handles
    before native entry and release them in managed `finally` after return.
@@ -85,8 +84,9 @@ managed observation here; both raw-handoff paths are explicitly unsupported.
    [`gchandleutilities.h`](../../external/dotnet-runtime/src/coreclr/vm/gchandleutilities.h)
    contains `ObjectFromHandle`: an internal helper, not an exported API the
    current shim can call. No guessed cast/dereference is permitted. Mission 08
-   must prove transition, resolution, handle support, and exactly-once restart
-   before this path becomes supported.
+   verifies the untagged normal token against ZeroGC's own stable handle record,
+   checks its type and non-null target only while stopped, and returns copied
+   status. Foreign and freed tokens are outside this unsafe entry's contract.
 4. Borrow resolved references only inside that uninterrupted stopped window.
    Do not allocate managed objects, call back into managed code, unwind across
    FFI, or retain dereferenceable object pointers after restart. Return copied
@@ -98,6 +98,8 @@ managed observation here; both raw-handoff paths are explicitly unsupported.
    managed reference. Do not derive addresses with `Unsafe`, `TypedReference`,
    casts of managed values, or serialized pointer integers.
 
-`Observe` is a managed control point for that later handoff, not a native ABI.
+`Observe` is the managed control point; the optional P/Invoke returns only an
+8-byte status/restart-count record. Native object reading remains unsupported;
+only the repeat probe checks a handle during suspension.
 Mission 08 owns the observation window; missions 09-10 establish native decoding
 and tracing. Declared edges alone cannot prove native object reading.

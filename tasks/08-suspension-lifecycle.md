@@ -17,17 +17,17 @@ into native code. Identify which thread may request suspension without deadlock.
 
 ## Your challenge
 
-- [ ] Define running, suspending, suspended, restarting, and failed states;
+- [x] Define running, suspending, suspended, restarting, and failed states;
   reject re-entry and invalid transitions.
-- [ ] After successful suspension, perform a bounded empty diagnostic operation
+- [x] After successful suspension, perform a bounded empty diagnostic operation
   and attempt restart exactly once on every exit path.
-- [ ] Validate the fixture handoff and borrowed-reference lifetime across this
+- [x] Validate the fixture handoff and borrowed-reference lifetime across this
   window; do not retain dereferenceable object pointers after restart.
-- [ ] Implement the allocation-context callbacks actually required by suspension
+- [x] Implement the allocation-context callbacks actually required by suspension
   with correct semantics, even while allocation remains slow.
-- [ ] Inject failure after suspension and before restart; report restart failure.
-- [ ] Keep managed allocation and FFI unwinding out of the suspended operation.
-- [ ] Start with one mutator and then demonstrate repeated cycles with two
+- [x] Inject failure after suspension and before restart; report restart failure.
+- [x] Keep managed allocation and FFI unwinding out of the suspended operation.
+- [x] Start with one mutator and then demonstrate repeated cycles with two
   bounded mutators, resolving required callback contracts explicitly.
 
 ## Checkpoint
@@ -35,6 +35,11 @@ into native code. Identify which thread may request suspension without deadlock.
 Managed execution reaches its continuation marker after successful diagnostic
 cycles. Every injected post-suspend failure attempts restart exactly once;
 re-entry is rejected and restart failure is observable.
+
+Completed for the pinned Windows x64 workstation runtime. Run
+`python scripts/build.py verify`, `python scripts/graph_fixtures.py`, and
+`python scripts/graph_fixtures.py --suspend-repeat`. See the
+[recorded results and limitations](../docs/08-suspension-lifecycle/04-handoff-checkpoint.md).
 
 ## Allowed shortcuts
 

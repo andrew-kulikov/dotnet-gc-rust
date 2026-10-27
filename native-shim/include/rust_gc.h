@@ -63,6 +63,16 @@ using RustGCObjectHandle = RustGCObject*;
 extern "C" RustGCObjectHandle rust_gc_handle_store_create_handle_of_type(
     RustGCObject object,
     std::uint32_t type) noexcept;
+extern "C" RustGCObjectHandle rust_gc_handle_store_create_dependent_handle(
+    RustGCObject primary,
+    RustGCObject secondary) noexcept;
+extern "C" RustGCObject rust_gc_handle_manager_get_dependent_handle_secondary(
+    RustGCObjectHandle handle) noexcept;
+extern "C" void rust_gc_handle_manager_set_dependent_handle_secondary(
+    RustGCObjectHandle handle,
+    RustGCObject object) noexcept;
+extern "C" void rust_gc_handle_manager_destroy_dependent_handle(
+    RustGCObjectHandle handle) noexcept;
 
 // IGCHandleManager implementation
 extern "C" bool rust_gc_handle_manager_initialize() noexcept;

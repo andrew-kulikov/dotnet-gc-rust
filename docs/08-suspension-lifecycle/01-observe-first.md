@@ -29,10 +29,11 @@ processes. The runner checks the graph against the oracle, requires successful
 process exit, verifies which GC loaded, and checks these ordered records:
 
 ```text
-dotnet: fixture '<scenario>' constructed
-dotnet: fixture '<scenario>' observation declared-only raw-handoff=unsupported
-dotnet: graph '<scenario>' <edges> <roots> <live labels>
-dotnet: fixture '<scenario>' continuation
+dotnet: Graph '<scenario>':
+dotnet: Edges: <edges>
+dotnet: Roots: <roots>
+dotnet: Reachable nodes: <live labels>
+dotnet: Managed execution continued after '<scenario>'.
 ```
 
 Raw logs are under `out/graph-fixtures/` and are replaced on rerun. A
@@ -155,8 +156,9 @@ this order:
 
 A normal handle roots an object; its token is not an object address.
 `ObjectFromHandle` is an internal runtime helper, not an exported API available
-to the shim. A supported resolution mechanism is still required before enabling
-raw handoff.
+to the shim. [Chapter 4](04-handoff-checkpoint.md) verifies the limited ZeroGC-owned
+normal-handle path by reading this collector's own slot, without calling that
+internal helper or reading managed object memory.
 
 The exactly-once rule counts the owner's restart attempt after its public
 suspend call returns successfully. CoreCLR may restart and retry internally.

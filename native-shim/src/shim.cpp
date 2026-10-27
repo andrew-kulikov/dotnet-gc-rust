@@ -50,6 +50,7 @@ static_assert(sizeof(RustGCToCLR) == 32);
 static_assert(alignof(RustGCToCLR) == 8);
 static_assert(GC_INTERFACE_MAJOR_VERSION == 5, "Unexpected CoreCLR GC interface major version");
 static_assert(GC_INTERFACE_MINOR_VERSION == 5, "Unexpected CoreCLR GC interface minor version");
+static_assert(HNDTYPE_DEPENDENT == 6, "Keep Rust's dependent handle kind in sync");
 
 namespace
 {
@@ -613,7 +614,12 @@ public:
 
     ABORTING_OVERRIDE(OBJECTHANDLE, CreateHandleOfType, (Object* object, HandleType type, int heapToAffinitizeTo));
     ABORTING_OVERRIDE(OBJECTHANDLE, CreateHandleWithExtraInfo, (Object* object, HandleType type, void* pExtraInfo));
-    ABORTING_OVERRIDE(OBJECTHANDLE, CreateDependentHandle, (Object* primary, Object* secondary));
+    OBJECTHANDLE CreateDependentHandle(Object* primary, Object* secondary) noexcept override
+    {
+        return reinterpret_cast<OBJECTHANDLE>(rust_gc_handle_store_create_dependent_handle(
+            static_cast<RustGCObject>(primary),
+            static_cast<RustGCObject>(secondary)));
+    }
 };
 
 static_assert(
@@ -646,7 +652,15 @@ public:
         return GlobalRustGCHandleStore.CreateHandleOfType(object, type);
     }
     ABORTING_OVERRIDE(OBJECTHANDLE, CreateDuplicateHandle, (OBJECTHANDLE handle));
-    ABORTING_OVERRIDE(void, DestroyHandleOfType, (OBJECTHANDLE handle, HandleType type));
+    void DestroyHandleOfType(OBJECTHANDLE handle, HandleType type) noexcept override
+    {
+        if (type != HNDTYPE_DEPENDENT)
+        {
+            AbortUnimplemented<void>("DestroyHandleOfType", __FUNCSIG__);
+        }
+        rust_gc_handle_manager_destroy_dependent_handle(
+            reinterpret_cast<RustGCObjectHandle>(handle));
+    }
     void DestroyHandleOfUnknownType(OBJECTHANDLE handle) noexcept override
     {
         rust_gc_handle_manager_destroy_handle_of_unknown_type(
@@ -661,8 +675,17 @@ public:
             static_cast<RustGCObject>(object));
     }
     ABORTING_OVERRIDE(bool, StoreObjectInHandleIfNull, (OBJECTHANDLE handle, Object* object));
-    ABORTING_OVERRIDE(void, SetDependentHandleSecondary, (OBJECTHANDLE handle, Object* object));
-    ABORTING_OVERRIDE(Object*, GetDependentHandleSecondary, (OBJECTHANDLE handle));
+    void SetDependentHandleSecondary(OBJECTHANDLE handle, Object* object) noexcept override
+    {
+        rust_gc_handle_manager_set_dependent_handle_secondary(
+            reinterpret_cast<RustGCObjectHandle>(handle),
+            static_cast<RustGCObject>(object));
+    }
+    Object* GetDependentHandleSecondary(OBJECTHANDLE handle) noexcept override
+    {
+        return static_cast<Object*>(rust_gc_handle_manager_get_dependent_handle_secondary(
+            reinterpret_cast<RustGCObjectHandle>(handle)));
+    }
     Object* InterlockedCompareExchangeObjectInHandle(
         OBJECTHANDLE handle,
         Object* object,
