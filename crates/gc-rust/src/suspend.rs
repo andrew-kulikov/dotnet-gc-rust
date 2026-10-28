@@ -1,6 +1,5 @@
 use crate::handle_store::{ObjectHandle, check_diagnostic_handle};
 use crate::runtime::{SuspendReason, gc_to_clr};
-use crate::util::log_info;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 #[repr(u8)]
@@ -110,6 +109,7 @@ static LIFECYCLE: Lifecycle = Lifecycle::new();
 
 /// Fixed-size copied observations; contains no managed references.
 #[repr(C)]
+#[derive(Debug)]
 pub struct DiagnosticResult {
     status: Status,
     restart_attempts: u32,
@@ -129,8 +129,8 @@ const _: () = {
 /// Call only through ordinary GC-transitioning P/Invoke after GC initialization,
 /// with no managed monitor or native lock held that suspension may need.
 #[unsafe(no_mangle)]
+#[tracing::instrument(level = "info", ret)]
 pub unsafe extern "C" fn rust_gc_suspend_ee() -> DiagnosticResult {
-    log_info!("rust_gc_suspend_ee()");
     run_diagnostic(|| Ok(()))
 }
 
@@ -142,16 +142,14 @@ pub unsafe extern "C" fn rust_gc_suspend_ee() -> DiagnosticResult {
 /// All `rust_gc_suspend_ee` preconditions apply. `handle` must be a live normal
 /// GCHandle allocated by this ZeroGC instance, exclusively owned by the caller
 /// and kept unchanged until return. Stock-GC handles are unsupported.
+// Only the outer boundary is instrumented: span callbacks run before suspend
+// and after restart. The stopped operation itself must not call the subscriber.
 #[unsafe(no_mangle)]
+#[tracing::instrument(level = "info", ret)]
 pub unsafe extern "C" fn rust_gc_suspend_with_handle(
     handle: ObjectHandle,
     fail_operation: u32,
 ) -> DiagnosticResult {
-    log_info!(
-        "rust_gc_suspend_with_handle([{:?}], fail_operation: {})",
-        handle,
-        fail_operation
-    );
     run_diagnostic(|| {
         // SAFETY: the caller owns the live store handle and cannot change/free it
         // during this synchronous call. Lifecycle invokes this only while stopped.

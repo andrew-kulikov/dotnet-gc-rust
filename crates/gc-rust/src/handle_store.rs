@@ -4,7 +4,6 @@ use std::ptr;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
 use crate::object::Object;
-use crate::util::log_trace;
 
 /// Address of a stable slot whose value is an [`Object`].
 ///
@@ -50,7 +49,9 @@ pub extern "C" fn rust_gc_handle_store_create_handle_of_type(
     object: Object,
     handle_type: u32,
 ) -> ObjectHandle {
-    log_trace!("rust_gc_handle_store_create_handle_of_type: {object:?} with type: {handle_type}");
+    tracing::trace!(
+        "rust_gc_handle_store_create_handle_of_type: {object:?} with type: {handle_type}"
+    );
     create_handle(object, handle_type, Object::from_ptr(ptr::null_mut()))
 }
 

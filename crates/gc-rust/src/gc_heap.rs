@@ -1,10 +1,10 @@
 use crate::alloc::{GcAllocContext, GcAllocFlags};
 use crate::object::Object;
 use crate::runtime::{
-    GcToClr, HResult, S_OK, WriteBarrierOp, WriteBarrierParameters, install_gc_to_clr,
+    E_FAIL, GcToClr, HResult, S_OK, WriteBarrierOp, WriteBarrierParameters, install_gc_to_clr,
 };
-use crate::util::{log_error, log_info, log_trace};
 use std::alloc::{Layout, alloc_zeroed};
+use std::io::Write;
 use std::ptr;
 use std::sync::{LazyLock, Mutex, OnceLock};
 
@@ -33,15 +33,15 @@ impl Ledger {
         self.requests = self.requests.saturating_add(1);
         self.requested_bytes = self.requested_bytes.saturating_add(size);
         let Some(layout) = object_layout(size) else {
-            log_error!("ZeroGC: invalid allocation size: {size}");
+            tracing::error!("ZeroGC: invalid allocation size: {size}");
             return Object::from_ptr(ptr::null_mut());
         };
         let Some(next_owned) = self.owned_bytes.checked_add(layout.size()) else {
-            log_error!("ZeroGC: allocation accounting overflow");
+            tracing::error!("ZeroGC: allocation accounting overflow");
             return Object::from_ptr(ptr::null_mut());
         };
         if next_owned > limit {
-            log_error!(
+            tracing::error!(
                 "ZeroGC: allocation limit exceeded: owned={} requested={} limit={limit}",
                 self.owned_bytes,
                 layout.size()
@@ -49,7 +49,7 @@ impl Ledger {
             return Object::from_ptr(ptr::null_mut());
         }
         if self.ranges.try_reserve(1).is_err() {
-            log_error!("ZeroGC: allocation registry exhausted");
+            tracing::error!("ZeroGC: allocation registry exhausted");
             return Object::from_ptr(ptr::null_mut());
         }
 
@@ -57,14 +57,14 @@ impl Ledger {
         // for the process lifetime and never handed to a second allocation.
         let base = unsafe { alloc_zeroed(layout) };
         if base.is_null() {
-            log_error!("ZeroGC: native allocation failed");
+            tracing::error!("ZeroGC: native allocation failed");
             return Object::from_ptr(ptr::null_mut());
         }
         let start = base as usize;
         let Some(end) = start.checked_add(layout.size()) else {
             // SAFETY: base was just allocated with this layout.
             unsafe { std::alloc::dealloc(base, layout) };
-            log_error!("ZeroGC: native address overflow");
+            tracing::error!("ZeroGC: native address overflow");
             return Object::from_ptr(ptr::null_mut());
         };
         self.ranges.push((start, end));
@@ -84,8 +84,13 @@ impl Ledger {
             .filter(|pair| pair[0].1 < pair[1].0)
             .count();
         let registry_bytes = self.ranges.capacity() * size_of::<(usize, usize)>();
-        log_error!(
-            "ZeroGC counters: requests={} successful={} requested_bytes={} owned_bytes={} limit={} ranges={} registry_bytes={} disjoint={} gaps={}",
+        // CoreCLR can request this report after Rust TLS destructors have run.
+        // tracing-subscriber's formatter uses destructible TLS and panics then;
+        // keep this terminal diagnostic on a direct, best-effort stderr writer.
+        let mut stderr = std::io::stderr().lock();
+        let _ = writeln!(
+            stderr,
+            "ERROR ZeroGC counters: requests={} successful={} requested_bytes={} owned_bytes={} limit={} ranges={} registry_bytes={} disjoint={} gaps={}",
             self.requests,
             self.successful,
             self.requested_bytes,
@@ -97,9 +102,12 @@ impl Ledger {
             gaps
         );
         for (start, end) in self.ranges.iter().take(2) {
-            log_error!("ZeroGC native range: [{start:#x}, {end:#x})");
+            let _ = writeln!(stderr, "ERROR ZeroGC native range: [{start:#x}, {end:#x})");
         }
-        log_error!("ZeroGC heap walk: unavailable; objects are separate native allocations");
+        let _ = writeln!(
+            stderr,
+            "ERROR ZeroGC heap walk: unavailable; objects are separate native allocations"
+        );
     }
 }
 
@@ -110,7 +118,15 @@ static mut INERT_CARD_TABLE: u32 = 0;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_gc_loader_probe() -> HResult {
-    log_info!("rust_gc_loader_probe()");
+    if let Err(error) = crate::logging::init() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "ZeroGC: failed to initialize tracing: {error}"
+        );
+        return E_FAIL;
+    }
+    // An attribute would create the span before logging is initialized.
+    let _span = tracing::info_span!("rust_gc_loader_probe").entered();
     S_OK
 }
 
@@ -122,17 +138,17 @@ pub extern "C" fn rust_gc_get_max_generation() -> u32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rust_gc_collection_count(_generation: i32, _get_bgc_fgc_coutn: i32) -> i32 {
+#[tracing::instrument(level = "info", ret)]
+pub extern "C" fn rust_gc_collection_count(generation: i32, get_bgc_fgc_count: i32) -> i32 {
     // Zero GC does not perform any collections, so the count is always zero (for now).
     // TODO: Implement actual collection counting when more generations are added.
-    log_info!("rust_gc_collection_count()");
     0
 }
 
 #[unsafe(no_mangle)]
+#[tracing::instrument(level = "info", ret)]
 pub extern "C" fn rust_gc_get_gc_count() -> u32 {
     // Diagnostic suspension is not a completed collection.
-    log_info!("rust_gc_get_gc_count()");
     0
 }
 
@@ -143,8 +159,8 @@ pub extern "C" fn rust_gc_get_gc_count() -> u32 {
 /// # Safety
 /// A non-null pointer must reference a live context owned by the calling thread.
 #[unsafe(no_mangle)]
+#[tracing::instrument(level = "info")]
 pub unsafe extern "C" fn rust_gc_fix_alloc_context(context: *const GcAllocContext) {
-    log_info!("rust_gc_fix_alloc_context()");
     // SAFETY: the runtime guarantees the lifetime and exclusive thread ownership.
     let context = unsafe { context.as_ref() }.expect("FixAllocContext: null allocation context");
     assert!(
@@ -157,20 +173,19 @@ pub unsafe extern "C" fn rust_gc_fix_alloc_context(context: *const GcAllocContex
 }
 
 #[unsafe(no_mangle)]
+#[tracing::instrument(level = "info", skip_all, ret)]
 pub unsafe extern "C" fn rust_gc_initialize(gc_to_clr_source: &GcToClr) -> HResult {
-    log_info!("rust_gc_initialize()");
-
     let limit = match std::env::var("ZERO_GC_LIMIT_BYTES") {
         Ok(value) => match value.parse::<usize>() {
             Ok(limit) if limit > 0 => limit,
             _ => {
-                log_error!("ZeroGC: ZERO_GC_LIMIT_BYTES must be a positive integer");
+                tracing::error!("ZeroGC: ZERO_GC_LIMIT_BYTES must be a positive integer");
                 DEFAULT_LIMIT_BYTES
             }
         },
         Err(std::env::VarError::NotPresent) => DEFAULT_LIMIT_BYTES,
         Err(std::env::VarError::NotUnicode(_)) => {
-            log_error!("ZeroGC: ZERO_GC_LIMIT_BYTES must be a positive integer");
+            tracing::error!("ZeroGC: ZERO_GC_LIMIT_BYTES must be a positive integer");
             DEFAULT_LIMIT_BYTES
         }
     };
@@ -231,7 +246,7 @@ pub extern "C" fn rust_gc_alloc(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_gc_set_finalization_run(obj: Object) {
-    log_trace!("rust_gc_set_finalization_run(obj: {obj:p})");
+    tracing::trace!("rust_gc_set_finalization_run(obj: {obj:p})");
     // TODO: Implement finalization bit flipping logic. Currently, this is a no-op.
 }
 
@@ -263,7 +278,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn loader_probe_succeeds() {
+    fn loader_probe_succeeds_repeatedly() {
+        assert_eq!(rust_gc_loader_probe(), S_OK);
         assert_eq!(rust_gc_loader_probe(), S_OK);
     }
 

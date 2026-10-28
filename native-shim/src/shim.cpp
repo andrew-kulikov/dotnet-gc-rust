@@ -761,15 +761,16 @@ extern "C" __declspec(dllexport) HRESULT LOCALGC_CALLCONV GC_Initialize(
         return E_NOTIMPL;
     }
 
+    const std::int32_t rustResult = rust_gc_loader_probe();
+    if (rustResult != 0)
+    {
+        return rustResult;
+    }
+
     *gcHeap = &GlobalRustGCHeap;
     *gcHandleManager = &GlobalRustGCHandleManager;
     // TODO: Implement GcDacVars support in the native shim.
-
-    const std::int32_t rustResult = rust_gc_loader_probe();
-    if (rustResult == 0)
-    {
-        WriteInitializationDiagnostic();
-    }
+    WriteInitializationDiagnostic();
 
     return S_OK;
 }

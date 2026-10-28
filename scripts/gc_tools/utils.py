@@ -61,6 +61,7 @@ def run(
         capture_output=capture_output,
         check=check,
         text=True,
+        encoding="utf-8",
         timeout=timeout,
     )
 
@@ -92,6 +93,8 @@ def run_scenario(
 def print_output(result: subprocess.CompletedProcess[str]) -> None:
     for output, stream in ((result.stdout, sys.stdout), (result.stderr, sys.stderr)):
         if output:
+            # Rust's tree output is UTF-8, including when stdout is redirected.
+            stream.reconfigure(encoding="utf-8")
             if stream is sys.stderr:
                 output = _colorize(output, 31, stream)
             stream.write(output)

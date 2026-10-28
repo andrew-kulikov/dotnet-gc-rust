@@ -77,17 +77,51 @@ helpers for tasks and labs.
 
 ## Rust logging
 
-`RUST_GC_LOG_LEVEL` sets the Rust collector's maximum log level: `error`,
-`warn`, `info`, `debug`, or `trace` (case-insensitive). The value is read once
-on the first log call; a missing or invalid value defaults to `info`.
-Error messages go to stderr; other levels go to stdout. Use `trace` to see
-individual handle operations and frozen-segment updates.
+The collector uses `tracing` for messages and function spans, with
+`tracing-subscriber` formatting the output with two spaces per nested span.
+`RUST_GC_LOG_LEVEL` selects the
+maximum verbosity: `error`, `warn`, `info`, `debug`, or `trace`
+(case-insensitive). It is read once during the native loader probe, before
+CoreCLR initializes the collector. A missing or invalid value defaults to `info`.
+Errors go to stderr; other levels go to stdout. Output includes UTC timestamps
+and uppercase levels, without ANSI colors. The terminal allocation report writes
+directly to stderr: CoreCLR can request it after the formatter's thread-local
+buffers have been destroyed.
 
-Inside the crate, import the macros you need from `crate::util`:
-`log_error!`, `log_warn!`, `log_info!`, `log_debug!`, and `log_trace!`.
-For example, `log_debug!("Object: {object:p}")` supports the same formatting
-syntax as `println!`. These macros skip argument evaluation for disabled
-levels and format directly without an intermediate `String`.
+Use `tracing::error!`, `tracing::warn!`, `tracing::info!`, `tracing::debug!`,
+and `tracing::trace!` directly. Existing formatting remains valid, and structured
+fields are also available:
+
+```rust,ignore
+tracing::debug!("Object: {object:p}");
+tracing::error!(size, limit, "ZeroGC: allocation limit exceeded");
+```
+
+Disabled levels skip argument evaluation. For selected functions,
+`#[tracing::instrument(level = "trace", ret)]` records the function name,
+arguments, and return value; `skip(...)` or `skip_all` excludes arguments.
+Every line uses the same timestamped format: `new` on span creation, `return`
+when `ret` is requested, and `close` on completion. `close` always includes
+`time.busy` (time entered) and `time.idle` (time not entered), including for spans
+with no events or return value. Busy time includes blocking and logging overhead;
+it is not CPU time or a GC pause metric. The small indentation wrapper delegates
+all fields, timestamps, and lifecycle formatting to the standard formatter.
+
+Function-entry diagnostics use `Info` spans: GC/handle-manager initialization,
+collection-count queries, allocation-context validation, and the two outer
+diagnostic suspension entries. Their parameters and copied results are recorded
+without dereferencing managed objects; GC callback tables are skipped. The
+loader probe creates its span explicitly after installing the subscriber, so
+its first call is visible too. Suspension spans begin before stopping the
+runtime and end after restart.
+Do not add logging or instrument functions executed between suspension and restart:
+formatting and output may allocate or acquire locks needed by stopped threads.
+
+Logging initialization is idempotent. Failure to install the subscriber returns
+`E_FAIL` through the native loader instead of panicking or silently disabling
+logs. Standalone Rust tests/examples that need output must install a subscriber;
+normal model examples do not need collector logging. See the
+[migration checkpoint](docs/LOGGING.md) for verification and remaining limits.
 
 ## Quality bar
 

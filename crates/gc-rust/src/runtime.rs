@@ -4,6 +4,7 @@ use std::sync::OnceLock;
 pub type HResult = u32;
 
 pub const S_OK: HResult = 0;
+pub const E_FAIL: HResult = 0x8000_4005;
 
 /// Reasons for which the runtime might suspend the execution environment (EE).
 /// See `SUSPEND_REASON` in the pinned `gcinterface.h`.

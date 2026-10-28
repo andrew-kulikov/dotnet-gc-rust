@@ -27,6 +27,8 @@ def run_process(
     )
     print_output(result)
     result.check_returncode()
+    if "panicked at" in result.stderr:
+        raise RuntimeError(f"{report_name}: Rust panicked despite a successful process exit")
     return result.stdout.splitlines() + result.stderr.splitlines()
 
 
