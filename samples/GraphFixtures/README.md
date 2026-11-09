@@ -14,6 +14,8 @@ handoff, eight cycles with two mutators, an injected operation error, exactly on
 restart per cycle, worker progress/exit, handle release, and continuation.
 See [the checkpoint](../../docs/08-suspension-lifecycle/04-handoff-checkpoint.md).
 The default command keeps the Mission 07 declared-observation baseline.
+Use `python scripts/graph_fixtures.py --fixture chain --inspect` for the
+Mission 09 reader and its repeated reference/null and mismatch checkpoint.
 
 This checks the Rust model, builds the managed sample and existing ZeroGC shim,
 then runs each scenario in a fresh process under stock workstation GC and ZeroGC.
@@ -98,8 +100,11 @@ observation; its native handoff remains unsupported.
    managed reference. Do not derive addresses with `Unsafe`, `TypedReference`,
    casts of managed values, or serialized pointer integers.
 
-`Observe` is the managed control point; the optional P/Invoke returns only an
-8-byte status/restart-count record. Native object reading remains unsupported;
-only the repeat probe checks a handle during suspension.
-Mission 08 owns the observation window; missions 09-10 establish native decoding
-and tracing. Declared edges alone cannot prove native object reading.
+`Observe` is the managed control point. Mission 08's handle probe returns an
+8-byte status/restart-count record. The separate Mission 09 P/Invoke returns a
+28-byte record with lifecycle and logical inspection observations; it reads only
+the supported fixture `Node` within the stopped window. Its source and target
+are a separate pair, with IDs supplied independently of the slot value. See the
+[reader contract](../../docs/09-real-object-inspection/04-suspended-inspection.md).
+Declared graph edges alone cannot prove native object reading; graph tracing is
+outside this probe.

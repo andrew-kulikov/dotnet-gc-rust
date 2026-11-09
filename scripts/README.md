@@ -13,6 +13,7 @@ python scripts/graph_fixtures.py --stock-only
 python scripts/graph_fixtures.py --fixture chain
 python scripts/graph_fixtures.py --fixture chain --suspend
 python scripts/graph_fixtures.py --suspend-repeat
+python scripts/graph_fixtures.py --fixture chain --inspect
 ```
 
 `--fixture` selects one named graph from the fixture file in both the Rust
@@ -30,6 +31,12 @@ runner checks worker exit, handle release, graph output, and continuation too.
 It is mutually exclusive with `--suspend` and cannot be combined with
 `--stock-only`. Logs use `.zerogc.suspend-repeat`; see the
 [completed Mission 08 checkpoint](../docs/08-suspension-lifecycle/04-handoff-checkpoint.md).
+
+`--inspect` runs the Mission 09 object reader on a separate pair of fixture
+nodes. Eight stopped cycles alternate `B` and null; cycle 4 intentionally uses
+the wrong expectation. The runner checks the actual slot, restart count, worker
+progress, managed handle release and continuation. Logs use the `.zerogc.inspect` suffix. See
+the [inspection checkpoint](../docs/09-real-object-inspection/README.md).
 
 The graph runner uses plain headings and always shows process stdout/stderr.
 There is no quiet/verbose mode or computed run/cycle summary. `run_process()`

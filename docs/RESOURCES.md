@@ -5,6 +5,7 @@ The list is ordered for this project rather than by prestige. Read only what sup
 ## Repository study notes
 
 - [Card tables and write barriers: why our ZeroGC works](ZERO_GC_WRITE_BARRIER.md) — a detailed walkthrough of card-table address arithmetic, single-reference and bulk-copy barriers, CoreCLR versus NativeAOT, and the empty-range workaround.
+- [Mission 09: reading a real managed object](09-real-object-inspection/README.md) — detailed study notes and an implementation plan for object layout, metadata provenance, bounded `GCDesc` decoding, and inspection inside the Mission 08 suspension window.
 
 ## Primary path: the MiniDump series
 

@@ -15,21 +15,25 @@ entries. One small supported shape is enough to test the boundary.
 Use the fixture `Node` with one reference field, then with that field null.
 Locate its size and reference-series rules in the exact pinned runtime source.
 
+See the [detailed study notes and implementation plan](../docs/09-real-object-inspection/README.md)
+for the object layout, metadata provenance, bounded `GCDesc` decoding,
+suspended inspection, implementation details, and the completed checkpoint.
+
 ## Your challenge
 
-- [ ] Document the supported Windows x64 object prefix, method-table metadata,
+- [x] Document the supported Windows x64 object prefix, method-table metadata,
   size, alignment, and required `GCDesc` form with pinned source locations.
-- [ ] Validate a supplied object start and its storage range before reading it.
+- [x] Validate a supplied object start and its storage range before reading it.
   The ZeroGC registry may provide bounds, never reachability.
-- [ ] Establish the runtime provenance and lifetime of metadata pointers before
+- [x] Establish the runtime provenance and lifetime of metadata pointers before
   reading them; numeric plausibility alone does not validate a method table.
-- [ ] Decode the supported size and enumerate the single reference slot using
+- [x] Decode the supported size and enumerate the single reference slot using
   checked offsets and bounded descriptor traversal.
-- [ ] Distinguish null references, unsupported layouts, invalid targets, and
+- [x] Distinguish null references, unsupported layouts, invalid targets, and
   corrupt descriptors with explicit diagnostic outcomes.
-- [ ] Compare actual slots and target labels with fixture expectations while
+- [x] Compare actual slots and target labels with fixture expectations while
   suspended; copy only logical observations out of the window.
-- [ ] Test malformed metadata through bounded synthetic buffers or an injected
+- [x] Test malformed metadata through bounded synthetic buffers or an injected
   reader, without corrupting the running managed heap.
 
 ## Checkpoint

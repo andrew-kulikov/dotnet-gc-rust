@@ -1,4 +1,5 @@
-use crate::handle_store::{ObjectHandle, check_diagnostic_handle};
+use crate::handle_store::{ObjectHandle, check_diagnostic_handle, resolve_diagnostic_handle};
+use crate::inspection::{InspectionStatus, Observation, inspect_node};
 use crate::runtime::{SuspendReason, gc_to_clr};
 use std::sync::atomic::{AtomicU8, Ordering};
 
@@ -115,6 +116,19 @@ pub struct DiagnosticResult {
     restart_attempts: u32,
 }
 
+#[repr(C)]
+#[derive(Debug)]
+pub struct InspectionResult {
+    lifecycle: DiagnosticResult,
+    observation: Observation,
+}
+
+const _: () = {
+    assert!(size_of::<InspectionResult>() == 28);
+    assert!(align_of::<InspectionResult>() == 4);
+    assert!(std::mem::offset_of!(InspectionResult, observation) == 8);
+};
+
 const _: () = {
     assert!(size_of::<DiagnosticResult>() == 8);
     assert!(align_of::<DiagnosticResult>() == 4);
@@ -158,6 +172,70 @@ pub unsafe extern "C" fn rust_gc_suspend_with_handle(
     })
 }
 
+/// Inspect one Node while suspended, returning only copied scalar observations.
+///
+/// # Safety
+/// The suspension preconditions of `rust_gc_suspend_ee` apply. Both handles
+/// must be live normal handles from this ZeroGC, exclusively owned and unchanged
+/// through return. `witness` must be the controlled fixture's live,
+/// noncollectible Node MethodTable, with its initialized descriptor and prefix
+/// readable for the entire call. The fixture has already created the objects,
+/// retains the type and objects until return, and excludes native writers.
+/// A non-null live slot must contain an initialized CLR object; arbitrary heap
+/// corruption and fabricated pointers or handles are outside this contract.
+#[unsafe(no_mangle)]
+#[tracing::instrument(level = "info", skip_all, ret)]
+pub unsafe extern "C" fn rust_gc_inspect_node(
+    source: ObjectHandle,
+    candidate: ObjectHandle,
+    witness: *const u8,
+    expected: u32,
+) -> InspectionResult {
+    let ranges = match crate::gc_heap::snapshot_object_ranges() {
+        Ok(ranges) => ranges,
+        Err(()) => {
+            return InspectionResult {
+                lifecycle: DiagnosticResult {
+                    status: Status::OperationFailed,
+                    restart_attempts: 0,
+                },
+                observation: Observation::empty(InspectionStatus::BudgetExceeded),
+            };
+        }
+    };
+    let mut observation = Observation::empty(InspectionStatus::NotRun);
+    let lifecycle = run_diagnostic(|| {
+        // SAFETY: the FFI caller owns the handles and prevents slot changes;
+        // this callback runs only after a successful suspension.
+        let source = unsafe { resolve_diagnostic_handle(source) }.map_err(|_| {
+            observation.status = InspectionStatus::InvalidObject;
+        })?;
+        // SAFETY: same handle ownership and stopped-window contract as above.
+        let candidate = unsafe { resolve_diagnostic_handle(candidate) }.map_err(|_| {
+            observation.status = InspectionStatus::InvalidTarget;
+        })?;
+        // SAFETY: the FFI contract establishes the witness and live object
+        // provenance. The pre-suspend snapshot bounds all supported reads.
+        observation = unsafe {
+            inspect_node(
+                &ranges,
+                source.as_ptr().cast(),
+                candidate.as_ptr().cast(),
+                witness,
+                expected,
+            )
+        };
+        match observation.status {
+            InspectionStatus::Reference | InspectionStatus::Null => Ok(()),
+            _ => Err(()),
+        }
+    });
+    InspectionResult {
+        lifecycle,
+        observation,
+    }
+}
+
 fn run_diagnostic(operation: impl FnOnce() -> Result<(), ()>) -> DiagnosticResult {
     let callbacks = gc_to_clr();
     let mut restart_attempts = 0;
@@ -193,6 +271,71 @@ mod tests {
         cell::Cell,
         panic::{AssertUnwindSafe, catch_unwind},
     };
+
+    #[test]
+    fn decoder_failure_runs_restart_and_restart_failure_takes_priority() {
+        #[repr(C, align(8))]
+        struct Metadata([u8; 32]);
+        #[repr(C)]
+        struct TestObject {
+            header: u64,
+            table: *const u8,
+            next: *const u8,
+        }
+
+        let mut metadata = Metadata([0; 32]); // count zero is corrupt
+        metadata.0[24..28].copy_from_slice(&0x0100_0000_u32.to_le_bytes());
+        metadata.0[28..32].copy_from_slice(&24_u32.to_le_bytes());
+        // SAFETY: offset 24 lies within the initialized metadata object.
+        let witness = unsafe { metadata.0.as_ptr().add(24) };
+        let object = TestObject {
+            header: 0,
+            table: witness,
+            next: std::ptr::null(),
+        };
+        let start = std::ptr::from_ref(&object).addr();
+        let ranges = [(start, start + size_of::<TestObject>())];
+        let source = std::ptr::from_ref(&object).cast::<u8>().wrapping_add(8);
+        for restart_fails in [false, true] {
+            let lifecycle = Lifecycle::new();
+            let attempts = Cell::new(0);
+            let detail = Cell::new(InspectionStatus::NotRun);
+            let status = lifecycle.run(
+                || Ok(()),
+                || {
+                    assert_eq!(
+                        lifecycle.run(|| panic!("nested suspend"), || Ok(()), || Ok(())),
+                        Status::Rejected
+                    );
+                    // SAFETY: all bytes and pointers belong to initialized test
+                    // objects, retained without writers for the duration.
+                    let observation = unsafe { inspect_node(&ranges, source, source, witness, 0) };
+                    detail.set(observation.status);
+                    Err(())
+                },
+                || {
+                    attempts.set(attempts.get() + 1);
+                    if restart_fails { Err(()) } else { Ok(()) }
+                },
+            );
+            assert_eq!(detail.get(), InspectionStatus::CorruptDescriptor);
+            assert_eq!(attempts.get(), 1);
+            assert_eq!(
+                status,
+                if restart_fails {
+                    Status::RestartFailed
+                } else {
+                    Status::OperationFailed
+                }
+            );
+            if restart_fails {
+                assert_eq!(
+                    lifecycle.run(|| Ok(()), || Ok(()), || Ok(())),
+                    Status::Rejected
+                );
+            }
+        }
+    }
 
     #[test]
     fn repeated_cycles_restart_once_and_reject_nested_entry() {

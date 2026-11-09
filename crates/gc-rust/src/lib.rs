@@ -5,6 +5,7 @@ mod gc_heap;
 pub mod graph;
 mod handle_manager;
 mod handle_store;
+mod inspection;
 mod logging;
 pub mod object;
 pub mod platform;

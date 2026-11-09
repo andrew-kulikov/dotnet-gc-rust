@@ -29,6 +29,18 @@ struct Ledger {
 }
 
 impl Ledger {
+    fn snapshot_ranges(&self, limit: usize) -> Result<Vec<(usize, usize)>, ()> {
+        if self.ranges.len() > limit {
+            return Err(());
+        }
+        let mut ranges = Vec::new();
+        ranges
+            .try_reserve_exact(self.ranges.len())
+            .map_err(|_| ())?;
+        ranges.extend_from_slice(&self.ranges);
+        Ok(ranges)
+    }
+
     fn allocate(&mut self, size: usize, limit: usize) -> Object {
         self.requests = self.requests.saturating_add(1);
         self.requested_bytes = self.requested_bytes.saturating_add(size);
@@ -109,6 +121,13 @@ impl Ledger {
             "ERROR ZeroGC heap walk: unavailable; objects are separate native allocations"
         );
     }
+}
+
+// Take this snapshot before SuspendEE. ZeroGC never frees or moves allocations.
+pub(crate) fn snapshot_object_ranges() -> Result<Vec<(usize, usize)>, ()> {
+    const MAX_RANGES: usize = 262_144;
+    let ledger = LEDGER.lock().unwrap_or_else(|poison| poison.into_inner());
+    ledger.snapshot_ranges(MAX_RANGES)
 }
 
 // With the empty heap and ephemeral ranges below, barrier helpers never index
@@ -276,6 +295,16 @@ fn object_layout(size: usize) -> Option<Layout> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn range_snapshot_respects_budget_and_is_independent() {
+        let mut ledger = Ledger::default();
+        ledger.ranges.extend([(8, 32), (40, 64)]);
+        assert!(ledger.snapshot_ranges(1).is_err());
+        let snapshot = ledger.snapshot_ranges(2).unwrap();
+        ledger.ranges.clear();
+        assert_eq!(snapshot, [(8, 32), (40, 64)]);
+    }
 
     #[test]
     fn loader_probe_succeeds_repeatedly() {

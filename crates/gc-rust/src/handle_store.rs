@@ -29,6 +29,17 @@ struct HandleRecord {
 /// The caller must own the handle exclusively, keep it alive, and suspend the EE
 /// for this call. No native thread may mutate the slot concurrently.
 pub(crate) unsafe fn check_diagnostic_handle(handle: ObjectHandle) -> Result<(), ()> {
+    // SAFETY: this function has the same handle and suspension requirements.
+    unsafe { resolve_diagnostic_handle(handle) }.map(|_| ())
+}
+
+/// Borrow the target only within the caller's current suspension window.
+///
+/// # Safety
+/// The handle must be a live normal ZeroGC handle, exclusively owned and
+/// unchanged until return. The EE must be suspended and native writers excluded.
+/// The returned address must not be used or retained after the EE restarts.
+pub(crate) unsafe fn resolve_diagnostic_handle(handle: ObjectHandle) -> Result<Object, ()> {
     if handle.is_null() || !handle.is_aligned() {
         return Err(());
     }
@@ -39,9 +50,7 @@ pub(crate) unsafe fn check_diagnostic_handle(handle: ObjectHandle) -> Result<(),
     if record.handle_type != 2 || record.object.is_null() {
         return Err(());
     }
-    // The opaque object value is borrowed only here, before the owner restarts.
-    // No object memory is read, and only success/failure leaves this scope.
-    Ok(())
+    Ok(record.object)
 }
 
 #[unsafe(no_mangle)]

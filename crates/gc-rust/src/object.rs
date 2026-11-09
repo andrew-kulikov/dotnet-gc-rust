@@ -3,8 +3,8 @@ use std::fmt;
 
 /// Opaque managed-object address received from CoreCLR.
 ///
-/// CoreCLR owns the managed object. Rust only passes this address around and
-/// must not interpret the managed object's C++ layout through the pointer.
+/// CoreCLR owns the managed object. This wrapper provides no object-layout
+/// access; the separate diagnostic reader has a narrow, explicit unsafe contract.
 /// Formatting never dereferences the address: `{object}` and `{object:p}` print
 /// the managed-object address, while `{object:?}` labels it as an `Object`.
 /// This does not invoke managed `ToString()` or inspect fields.
@@ -67,5 +67,27 @@ mod tests {
     fn object_has_native_pointer_layout() {
         assert_eq!(size_of::<Object>(), size_of::<*mut c_void>());
         assert_eq!(align_of::<Object>(), align_of::<*mut c_void>());
+    }
+
+    #[test]
+    fn synthetic_node_descriptor_describes_one_reference_slot() {
+        // CoreCLR x64 stores a positive GCDesc immediately before MethodTable:
+        // adjusted series size, offset from Object*, then series count.
+        let mut descriptor = [0_u8; 24];
+        descriptor[0..8].copy_from_slice(&(-16_i64).to_le_bytes());
+        descriptor[8..16].copy_from_slice(&8_u64.to_le_bytes());
+        descriptor[16..24].copy_from_slice(&1_i64.to_le_bytes());
+
+        let word = |offset| u64::from_le_bytes(descriptor[offset..offset + 8].try_into().unwrap());
+        let object_size = 24_i64; // Includes the 8-byte header before Object*.
+        let adjustment = word(0) as i64;
+        let offset = word(8);
+        let count = word(16) as i64;
+        let reference_bytes = object_size.checked_add(adjustment).unwrap();
+
+        assert_eq!(count, 1);
+        assert_eq!(reference_bytes, 8);
+        assert_eq!(offset..offset + reference_bytes as u64, 8..16);
+        assert_eq!(object_size - 8, 16); // End of object relative to Object*.
     }
 }
