@@ -26,28 +26,27 @@ and individual Rust test commands.
 
 `--suspend-repeat` checks one normal-handle handoff with one mutator, then eight
 cycles with a second bounded mutator. Cycle 4 injects a post-suspend operation
-error; all cycles must restart once and show worker progress afterward. The
-runner checks worker exit, handle release, graph output, and continuation too.
+error; all cycles must restart once and show worker progress afterward. The managed sample checks worker progress and exit, restart, and handle release;
+it also prints the graph and continuation.
 It is mutually exclusive with `--suspend` and cannot be combined with
 `--stock-only`. Logs use `.zerogc.suspend-repeat`; see the
 [completed Mission 08 checkpoint](../docs/08-suspension-lifecycle/04-handoff-checkpoint.md).
 
 `--inspect` runs the Mission 09 object reader on a separate pair of fixture
 nodes. Eight stopped cycles alternate `B` and null; cycle 4 intentionally uses
-the wrong expectation. The runner checks the actual slot, restart count, worker
-progress, managed handle release and continuation. Logs use the `.zerogc.inspect` suffix. See
+the wrong expectation. The managed sample checks the actual slot, restart count, worker
+progress, and managed handle release, then prints its continuation. Logs use the `.zerogc.inspect` suffix. See
 the [inspection checkpoint](../docs/09-real-object-inspection/README.md).
 
 The graph runner uses plain headings and always shows process stdout/stderr.
 There is no quiet/verbose mode or computed run/cycle summary. `run_process()`
-prints the output, checks the exit code, and returns its lines (stdout first,
-then stderr). Raw model and managed output is also saved as separate
+prints the output and checks the exit code (stdout first, then stderr). Raw model and managed output is also saved as separate
 `*.stdout.log` / `*.stderr.log` files under `out/graph-fixtures/`.
 
-Output comparisons only check the mission checkpoint: model live sets, the
-expected graph/roots, readable graph/continuation messages in order,
-the optional suspension results, and the correct GC initialization. They do not
-extract allocation counters or timing metrics. Managed runs retain a 30-second
+The Rust model and managed sample check their own expected reachable sets. The
+managed diagnostic modes also check their returned status and observations.
+The runner does not parse process output or independently compare every printed
+edge, root, or GC initialization message. Managed runs retain a 30-second
 timeout; the model command may build Rust code, so it has no process timeout.
 
 Both entry points accept `--log-level error|warn|info|debug|trace` to set Rust

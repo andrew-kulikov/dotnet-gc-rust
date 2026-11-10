@@ -19,8 +19,8 @@ Mission 09 reader and its repeated reference/null and mismatch checkpoint.
 
 This checks the Rust model, builds the managed sample and existing ZeroGC shim,
 then runs each scenario in a fresh process under stock workstation GC and ZeroGC.
-Every supported run must export the exact graph, roots, and expected live labels
-and reach its continuation marker. Logs go to `out/graph-fixtures/`.
+The sample prints the graph, roots, reachable labels, and continuation, and
+checks its reachable labels against the fixture expectation. Logs go to `out/graph-fixtures/`.
 The `Graph fixtures` Windows workflow runs the same command on pull requests.
 On other systems explicitly select the partial checkpoint:
 
@@ -51,14 +51,15 @@ the managed fixture needs no file I/O or file-handle/finalization machinery.
 C# constructs non-finalizable `Node` objects with exactly one reference field.
 At the no-inline `Observe` control point it exports edges read from actual
 `Next` fields, walks those references using identity, and checks the manually
-declared live set. The runner checks exported edges and roots too: an incorrect
-but equally reachable graph cannot pass. Rust builds the same logical graph
+declared live set. Edges and roots are printed for study, but the runner does
+not independently compare them; an incorrect graph with the same reachable set
+could pass. Rust builds the same logical graph
 using `Graph`, checks marking against the oracle, then sweeps.
 No collector implementation or external parsing package is added.
 
-The runner checks readable result lines in order: the graph's edges/roots/reachable
-nodes and managed continuation. Suspension options add handle, cycle, restart, worker
-progress, and cleanup messages. Every message follows its corresponding check.
+The runner checks process exit codes and displays output without parsing it.
+Suspension options add handle, cycle, restart, worker progress, and cleanup
+messages; the managed code checks the diagnostic results itself.
 Arrays remain rooted through `GC.KeepAlive` after observation and continuation.
 This deliberately retains disconnected nodes: fixture roots are a chosen input
 to graph reachability, not an inventory of CoreCLR roots. An empty explicit

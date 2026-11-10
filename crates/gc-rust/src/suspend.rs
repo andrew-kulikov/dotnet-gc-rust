@@ -177,7 +177,7 @@ pub unsafe extern "C" fn rust_gc_suspend_with_handle(
 /// # Safety
 /// The suspension preconditions of `rust_gc_suspend_ee` apply. Both handles
 /// must be live normal handles from this ZeroGC, exclusively owned and unchanged
-/// through return. `witness` must be the controlled fixture's live,
+/// through return. `node_method_table` must be the controlled fixture's live,
 /// noncollectible Node MethodTable, with its initialized descriptor and prefix
 /// readable for the entire call. The fixture has already created the objects,
 /// retains the type and objects until return, and excludes native writers.
@@ -186,10 +186,10 @@ pub unsafe extern "C" fn rust_gc_suspend_with_handle(
 #[unsafe(no_mangle)]
 #[tracing::instrument(level = "info", skip_all, ret)]
 pub unsafe extern "C" fn rust_gc_inspect_node(
-    source: ObjectHandle,
-    candidate: ObjectHandle,
-    witness: *const u8,
-    expected: u32,
+    node_to_inspect_handle: ObjectHandle,
+    known_next_node_handle: ObjectHandle,
+    node_method_table: *const u8,
+    expected_next_node_id: u32,
 ) -> InspectionResult {
     let ranges = match crate::gc_heap::snapshot_object_ranges() {
         Ok(ranges) => ranges,
@@ -207,22 +207,24 @@ pub unsafe extern "C" fn rust_gc_inspect_node(
     let lifecycle = run_diagnostic(|| {
         // SAFETY: the FFI caller owns the handles and prevents slot changes;
         // this callback runs only after a successful suspension.
-        let source = unsafe { resolve_diagnostic_handle(source) }.map_err(|_| {
-            observation.status = InspectionStatus::InvalidObject;
-        })?;
+        let node_to_inspect = unsafe { resolve_diagnostic_handle(node_to_inspect_handle) }
+            .map_err(|_| {
+                observation.status = InspectionStatus::InvalidObject;
+            })?;
         // SAFETY: same handle ownership and stopped-window contract as above.
-        let candidate = unsafe { resolve_diagnostic_handle(candidate) }.map_err(|_| {
-            observation.status = InspectionStatus::InvalidTarget;
-        })?;
-        // SAFETY: the FFI contract establishes the witness and live object
+        let known_next_node = unsafe { resolve_diagnostic_handle(known_next_node_handle) }
+            .map_err(|_| {
+                observation.status = InspectionStatus::InvalidTarget;
+            })?;
+        // SAFETY: the FFI contract establishes the Node MethodTable and live object
         // provenance. The pre-suspend snapshot bounds all supported reads.
         observation = unsafe {
             inspect_node(
                 &ranges,
-                source.as_ptr().cast(),
-                candidate.as_ptr().cast(),
-                witness,
-                expected,
+                node_to_inspect,
+                known_next_node,
+                node_method_table,
+                expected_next_node_id,
             )
         };
         match observation.status {
@@ -287,15 +289,21 @@ mod tests {
         metadata.0[24..28].copy_from_slice(&0x0100_0000_u32.to_le_bytes());
         metadata.0[28..32].copy_from_slice(&24_u32.to_le_bytes());
         // SAFETY: offset 24 lies within the initialized metadata object.
-        let witness = unsafe { metadata.0.as_ptr().add(24) };
+        let node_method_table = unsafe { metadata.0.as_ptr().add(24) };
         let object = TestObject {
             header: 0,
-            table: witness,
+            table: node_method_table,
             next: std::ptr::null(),
         };
         let start = std::ptr::from_ref(&object).addr();
         let ranges = [(start, start + size_of::<TestObject>())];
-        let source = std::ptr::from_ref(&object).cast::<u8>().wrapping_add(8);
+        let source = crate::object::Object::from_ptr(
+            std::ptr::from_ref(&object)
+                .cast::<u8>()
+                .wrapping_add(8)
+                .cast_mut()
+                .cast(),
+        );
         for restart_fails in [false, true] {
             let lifecycle = Lifecycle::new();
             let attempts = Cell::new(0);
@@ -309,7 +317,8 @@ mod tests {
                     );
                     // SAFETY: all bytes and pointers belong to initialized test
                     // objects, retained without writers for the duration.
-                    let observation = unsafe { inspect_node(&ranges, source, source, witness, 0) };
+                    let observation =
+                        unsafe { inspect_node(&ranges, source, source, node_method_table, 0) };
                     detail.set(observation.status);
                     Err(())
                 },

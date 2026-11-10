@@ -2,9 +2,11 @@
 
 [Overview](README.md) · [Previous: GCDesc](03-gcdesc.md) · [Next: checkpoint](05-plan-and-checkpoint.md)
 
-The fixture creates source `A` and candidate `B`, retains a normal handle for
-each, and obtains a non-collectible `Node` type witness before entering native
-code. An ordinary GC-transitioning P/Invoke calls `rust_gc_inspect_node` in
+The fixture creates `nodeToInspect` (`A`) and `knownNextNode` (`B`) and retains
+a normal handle for each. It also supplies `nodeMethodTable`: the trusted
+non-collectible `Node` MethodTable obtained from `typeof(Node).TypeHandle.Value`
+on the pinned runtime. Rust uses it to validate object types before reading
+metadata. An ordinary GC-transitioning P/Invoke calls `rust_gc_inspect_node` in
 [suspend.rs](../../crates/gc-rust/src/suspend.rs). Objects and type stay alive
 through the call; `finally` frees the managed handles. ZeroGC's existing
 normal-handle destruction is a no-op, so their native records remain allocated.
@@ -13,11 +15,10 @@ or concurrently modified handles are outside the entry's unsafe contract.
 
 The native entry snapshots allocation ranges, then uses the existing lifecycle
 owner. Its operation resolves the handles only after suspension. It validates the
-source prefix, compares its MethodTable with the witness, copies the fixed
+inspected object's prefix, compares its MethodTable with `nodeMethodTable`, copies the fixed
 metadata span, decodes the descriptor, validates the full object range and
 reads the slot. For a non-null target it checks the target's exact allocation
-start, extent and MethodTable before comparing its address to the candidate
-handle. Actual ID 1 means `B`; ID 0 means null. The independent expected ID is
+start, extent and MethodTable before comparing its address to `knownNextNodeHandle`. Actual ID 1 means `B`; ID 0 means null. The independent expected ID is
 used only for comparison. The code neither allocates nor logs in the stopped
 operation and copies no object or metadata pointer into the result.
 

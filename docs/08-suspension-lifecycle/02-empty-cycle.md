@@ -2,6 +2,9 @@
 
 [Mission overview](README.md) · [Previous: the suspension contract](01-observe-first.md)
 
+> The runner described in the original record was simplified later; see the
+> [current runner documentation](../../scripts/README.md) for its checks.
+
 This chapter records the first-cycle milestone. The remaining work listed below
 was subsequently completed in [chapter 3](03-repeated-cycles.md) and
 [chapter 4](04-handoff-checkpoint.md).

@@ -1,5 +1,7 @@
 //! Narrow, bounded diagnostics for the GraphFixtures Node on CoreCLR x64.
 
+use crate::object::Object;
+
 const HEADER_SIZE: usize = 8;
 const WORD_SIZE: usize = 8;
 const CONTAINS_POINTERS: u32 = 0x0100_0000;
@@ -35,13 +37,13 @@ pub(crate) struct Observation {
     pub size: u32,
     pub slot_offset: u32,
     pub slot_count: u32,
-    pub target_id: u32,
+    pub next_node_id: u32,
 }
 
 const _: () = {
     assert!(size_of::<Observation>() == 20);
     assert!(align_of::<Observation>() == 4);
-    assert!(std::mem::offset_of!(Observation, target_id) == 16);
+    assert!(std::mem::offset_of!(Observation, next_node_id) == 16);
 };
 
 impl Observation {
@@ -51,66 +53,75 @@ impl Observation {
             size: 0,
             slot_offset: 0,
             slot_count: 0,
-            target_id: 0,
+            next_node_id: 0,
         }
     }
 }
 
-/// Inspect a source and identify its one reference against a single fixture
-/// candidate (ID 1); ID 0 denotes null. No address is returned.
+/// Read `node_to_inspect.Next` and identify it against `known_next_node`.
+/// ID 1 is the known node; ID 0 is null. No address is returned.
 ///
 /// # Safety
-/// Both object pointers must come from live, exclusively owned normal handles,
-/// and `witness` must be the live noncollectible Node MethodTable supplied by
-/// the controlled fixture. Its `[M-24,M+8)` span must be initialized and
+/// Both objects must come from live, exclusively owned normal handles,
+/// and `node_method_table` must be the live noncollectible Node MethodTable
+/// supplied by the controlled fixture. Its `[M-24,M+8)` span must be initialized and
 /// readable. The snapshot must cover these retained ZeroGC allocations. The EE
 /// is suspended, no native writer may race, and no borrowed pointer may survive
 /// restart. Live reference slots must contain null or initialized CLR objects;
 /// arbitrary heap corruption is outside this contract.
 pub(crate) unsafe fn inspect_node(
     ranges: &[(usize, usize)],
-    source: *const u8,
-    candidate: *const u8,
-    witness: *const u8,
-    expected: u32,
+    node_to_inspect: Object,
+    known_next_node: Object,
+    node_method_table: *const u8,
+    expected_next_node_id: u32,
 ) -> Observation {
     use InspectionStatus::*;
     let operation = || -> Result<Observation, InspectionStatus> {
-        let range = object_range(ranges, source.addr()).map_err(|_| InvalidObject)?;
+        let node_address = node_to_inspect.as_ptr().cast::<u8>();
+        let range = object_range(ranges, node_address.addr()).map_err(|_| InvalidObject)?;
         // SAFETY: the exact owned range includes the initialized object word;
         // the caller guarantees the object stays live and cannot be written.
-        let actual_table = unsafe { source.cast::<*const u8>().read() };
+        let actual_method_table = unsafe { node_address.cast::<*const u8>().read() };
+        // Equality alone cannot establish provenance: the caller supplies a
+        // trusted Node MethodTable. Never read metadata through the object's table.
+        if node_method_table.is_null()
+            || !node_method_table.addr().is_multiple_of(WORD_SIZE)
+            || actual_method_table != node_method_table
+        {
+            return Err(UnsupportedLayout);
+        }
         let mut metadata = [0_u8; 32];
-        with_expected_metadata(actual_table.addr(), witness.addr(), || {
-            // SAFETY: equality with the trusted witness was checked before this
-            // callback. Its readable initialized span and lifetime are caller
-            // preconditions; metadata is not concurrently modified.
-            unsafe { std::ptr::copy_nonoverlapping(witness.sub(24), metadata.as_mut_ptr(), 32) };
-        })
-        .map_err(|_| UnsupportedLayout)?;
+        // SAFETY: the caller guarantees that the trusted MethodTable's metadata span
+        // is initialized, readable, and unchanged during this inspection.
+        unsafe {
+            std::ptr::copy_nonoverlapping(node_method_table.sub(24), metadata.as_mut_ptr(), 32)
+        };
         let layout = decode_node(&metadata[24..32], &metadata[..24])?;
         object_extent(range, layout.size).map_err(|_| InvalidObject)?;
-        // SAFETY: the decoded slot is aligned and within the checked initialized
-        // object extent; suspension and the caller exclude concurrent writers.
-        let target = unsafe { source.add(layout.slot).cast::<*const u8>().read() };
-        let (status, target_id) = if target.is_null() {
+        // SAFETY: the aligned slot is within the initialized object extent.
+        // A CLR reference has pointer layout, as does the transparent Object
+        // wrapper; suspension and the caller exclude concurrent writers.
+        let next_node = unsafe { node_address.add(layout.slot).cast::<Object>().read() };
+        let (status, next_node_id) = if next_node.is_null() {
             (Null, 0)
         } else {
-            let target_range = object_range(ranges, target.addr()).map_err(|_| InvalidTarget)?;
-            object_extent(target_range, layout.size).map_err(|_| InvalidTarget)?;
-            // SAFETY: the target is an initialized CLR object by the caller's
+            let next_range =
+                object_range(ranges, next_node.as_ptr().addr()).map_err(|_| InvalidTarget)?;
+            object_extent(next_range, layout.size).map_err(|_| InvalidTarget)?;
+            // SAFETY: the next node is an initialized CLR object by the caller's
             // contract; its exact owned range includes this aligned object word.
-            let target_table = unsafe { target.cast::<*const u8>().read() };
-            if target_table != witness {
+            let next_method_table = unsafe { next_node.as_ptr().cast::<*const u8>().read() };
+            if next_method_table != node_method_table {
                 return Err(InvalidTarget);
             }
-            if target != candidate {
+            if next_node != known_next_node {
                 return Err(UnknownTarget);
             }
             (Reference, 1)
         };
         Ok(Observation {
-            status: if target_id == expected {
+            status: if next_node_id == expected_next_node_id {
                 status
             } else {
                 ExpectationMismatch
@@ -118,7 +129,7 @@ pub(crate) unsafe fn inspect_node(
             size: layout.size as u32,
             slot_offset: layout.slot as u32,
             slot_count: 1,
-            target_id,
+            next_node_id,
         })
     };
     operation().unwrap_or_else(Observation::empty)
@@ -141,6 +152,8 @@ fn decode_node(prefix: &[u8], descriptor: &[u8]) -> Result<NodeLayout, Inspectio
     if flags & CONTAINS_POINTERS == 0 || size != 24 {
         return Err(InvalidMetadata);
     }
+    // CoreCLR stores a signed series count immediately before the MethodTable.
+    // This fixture supports exactly one positive series, not repeating layouts.
     let count = read_word(descriptor, 16).ok_or(CorruptDescriptor)? as i64;
     if count == 0 {
         return Err(CorruptDescriptor);
@@ -150,6 +163,7 @@ fn decode_node(prefix: &[u8], descriptor: &[u8]) -> Result<NodeLayout, Inspectio
     }
     let adjustment = read_word(descriptor, 0).ok_or(CorruptDescriptor)? as i64;
     let offset = read_word(descriptor, 8).ok_or(CorruptDescriptor)?;
+    // A series stores its byte length minus the object's base size.
     let length = i128::from(adjustment) + size as i128;
     if length <= 0 || length > (size - HEADER_SIZE) as i128 || length % 8 != 0 {
         return Err(CorruptDescriptor);
@@ -188,23 +202,9 @@ fn object_extent(range: (usize, usize), size: usize) -> Result<(), ()> {
     if end > range.1 { Err(()) } else { Ok(()) }
 }
 
-// `read` is invoked only for an exact, untagged witness from the controlled
-// fixture. Numeric equality does not make an arbitrary witness trustworthy.
-fn with_expected_metadata<T>(
-    actual: usize,
-    witness: usize,
-    read: impl FnOnce() -> T,
-) -> Result<T, ()> {
-    if witness == 0 || !witness.is_multiple_of(WORD_SIZE) || actual != witness {
-        return Err(());
-    }
-    Ok(read())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::Cell;
 
     #[test]
     fn bounds_require_an_exact_start_and_complete_ranges() {
@@ -218,19 +218,6 @@ mod tests {
             assert_eq!(object_extent((0x1000, 0x1018), size), Err(()));
         }
         assert_eq!(object_extent((usize::MAX - 15, usize::MAX), 24), Err(()));
-    }
-
-    #[test]
-    fn mismatched_method_table_never_reads_metadata() {
-        let reads = Cell::new(0);
-        for (actual, witness) in [(0, 0), (0x1000, 0x2000), (0x2001, 0x2001)] {
-            assert_eq!(
-                with_expected_metadata(actual, witness, || reads.set(1)),
-                Err(())
-            );
-        }
-        assert_eq!(reads.get(), 0);
-        assert_eq!(with_expected_metadata(0x2000, 0x2000, || 7), Ok(7));
     }
 
     fn node_metadata() -> ([u8; 8], [u8; 24]) {
@@ -329,15 +316,15 @@ mod tests {
         metadata.0[..24].copy_from_slice(&descriptor);
         metadata.0[24..].copy_from_slice(&prefix);
         // SAFETY: this points into the same initialized, aligned metadata object.
-        let witness = unsafe { metadata.0.as_ptr().add(24) };
-        let candidate = TestObject {
+        let node_method_table = unsafe { metadata.0.as_ptr().add(24) };
+        let known_next_node = TestObject {
             header: 0,
-            table: witness,
+            table: node_method_table,
             next: std::ptr::null(),
         };
         let unknown = TestObject {
             header: 0,
-            table: witness,
+            table: node_method_table,
             next: std::ptr::null(),
         };
         let foreign = TestObject {
@@ -347,78 +334,105 @@ mod tests {
         };
         let unregistered = TestObject {
             header: 0,
-            table: witness,
+            table: node_method_table,
             next: std::ptr::null(),
         };
-        let candidate_ptr = test_object_pointer(&candidate);
-        // SAFETY: this is an interior byte of the candidate object, not read.
-        let interior = unsafe { candidate_ptr.add(1) };
+        let known_next_node_ptr = test_object_pointer(&known_next_node);
+        // SAFETY: this is an interior byte of the known next node, not read.
+        let interior = unsafe { known_next_node_ptr.add(1) };
         // SAFETY: this points at the next field inside the same object, not read.
-        let aligned_interior = unsafe { candidate_ptr.add(8) };
-        for (table, target, expected, status, id) in [
-            (witness, candidate_ptr, 1, InspectionStatus::Reference, 1),
+        let aligned_interior = unsafe { known_next_node_ptr.add(8) };
+        for (table, next_node, expected_next_node_id, status, id) in [
             (
-                witness,
-                candidate_ptr,
+                node_method_table,
+                known_next_node_ptr,
+                1,
+                InspectionStatus::Reference,
+                1,
+            ),
+            (
+                node_method_table,
+                known_next_node_ptr,
                 0,
                 InspectionStatus::ExpectationMismatch,
                 1,
             ),
-            (witness, std::ptr::null(), 0, InspectionStatus::Null, 0),
             (
-                witness,
+                node_method_table,
+                std::ptr::null(),
+                0,
+                InspectionStatus::Null,
+                0,
+            ),
+            (
+                node_method_table,
                 test_object_pointer(&unknown),
                 1,
                 InspectionStatus::UnknownTarget,
                 0,
             ),
             (
-                witness,
+                node_method_table,
                 test_object_pointer(&foreign),
                 1,
                 InspectionStatus::InvalidTarget,
                 0,
             ),
-            (witness, interior, 1, InspectionStatus::InvalidTarget, 0),
             (
-                witness,
+                node_method_table,
+                interior,
+                1,
+                InspectionStatus::InvalidTarget,
+                0,
+            ),
+            (
+                node_method_table,
                 aligned_interior,
                 1,
                 InspectionStatus::InvalidTarget,
                 0,
             ),
             (
-                witness,
+                node_method_table,
                 test_object_pointer(&unregistered),
                 1,
                 InspectionStatus::InvalidTarget,
                 0,
             ),
             (
-                std::ptr::null(),
-                candidate_ptr,
+                // A foreign table is never dereferenced; only the trusted
+                // Node MethodTable may be used to read metadata.
+                std::ptr::without_provenance(8),
+                known_next_node_ptr,
                 1,
                 InspectionStatus::UnsupportedLayout,
                 0,
             ),
         ] {
-            let source = TestObject {
+            let node_to_inspect = TestObject {
                 header: 0,
                 table,
-                next: target,
+                next: next_node,
             };
             let ranges = [
-                test_range(&source),
-                test_range(&candidate),
+                test_range(&node_to_inspect),
+                test_range(&known_next_node),
                 test_range(&unknown),
                 test_range(&foreign),
             ];
-            let source_ptr = test_object_pointer(&source);
+            let node_to_inspect_ptr = test_object_pointer(&node_to_inspect);
             // SAFETY: all pointers are derived from initialized owned test objects;
             // the metadata view is within `metadata`, and no thread mutates them.
-            let result =
-                unsafe { inspect_node(&ranges, source_ptr, candidate_ptr, witness, expected) };
-            assert_eq!((result.status, result.target_id), (status, id));
+            let result = unsafe {
+                inspect_node(
+                    &ranges,
+                    Object::from_ptr(node_to_inspect_ptr.cast_mut().cast()),
+                    Object::from_ptr(known_next_node_ptr.cast_mut().cast()),
+                    node_method_table,
+                    expected_next_node_id,
+                )
+            };
+            assert_eq!((result.status, result.next_node_id), (status, id));
             if matches!(
                 status,
                 InspectionStatus::Reference

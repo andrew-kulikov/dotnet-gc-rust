@@ -2,6 +2,9 @@
 
 [Mission overview](README.md) · [Next: the first empty cycle](02-empty-cycle.md)
 
+> The runner described in the original record was simplified later; see the
+> [current runner documentation](../../scripts/README.md) for its checks.
+
 Native diagnostics need a period in which managed threads cannot change the
 graph being inspected. This chapter explains the CoreCLR contract for creating
 that period and the obligations it places on ZeroGC.

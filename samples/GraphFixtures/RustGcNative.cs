@@ -12,5 +12,5 @@ static partial class RustGcNative
     public static partial DiagnosticResult SuspendWithHandle(nint handle, uint failOperation);
 
     [LibraryImport("gc_rust", EntryPoint = "rust_gc_inspect_node")]
-    public static partial InspectionResult InspectNode(nint source, nint candidate, nint witness, uint expected);
+    public static partial InspectionResult InspectNode(nint nodeToInspectHandle, nint knownNextNodeHandle, nint nodeMethodTable, uint expectedNextNodeId);
 }

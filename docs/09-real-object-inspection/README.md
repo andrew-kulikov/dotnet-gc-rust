@@ -12,8 +12,9 @@ checked an intentional mismatch and worker progress after restart. Synthetic
 tests cover malformed input; they are separate from the runtime evidence.
 
 Run `python scripts/graph_fixtures.py --fixture chain --inspect` for the focused
-checkpoint. It builds the fixture and ZeroGC, checks the result records, and
-saves process logs under `out/graph-fixtures/`.
+checkpoint. It builds the fixture and ZeroGC, displays their output, checks
+process exits, and saves logs under `out/graph-fixtures/`. The managed sample
+checks the returned inspection and restart results.
 
 1. [Object layout](01-object-layout.md): prefix, size, alignment, and flags.
 2. [Bounds and metadata provenance](02-metadata-and-bounds.md): what makes

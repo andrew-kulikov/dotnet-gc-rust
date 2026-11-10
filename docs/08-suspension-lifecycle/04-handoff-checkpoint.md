@@ -2,6 +2,9 @@
 
 [Mission overview](README.md) · [Previous: repeated cycles](03-repeated-cycles.md)
 
+> The runner described in the original record was simplified later; see the
+> [current runner documentation](../../scripts/README.md) for its checks.
+
 Mission 08 passes on the pinned Windows x64 workstation CoreCLR 10.0.11 runtime.
 The baseline empty cycle was reproduced before changes. The completed probe adds
 one owned normal handle, repeated suspension with a second bounded mutator, and

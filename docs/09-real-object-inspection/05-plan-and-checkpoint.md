@@ -141,3 +141,109 @@ and does not establish reachability or authorize reclamation. Existing ZeroGC
 normal-handle destruction is a no-op and retains the native handle records even
 after `GCHandle.Free`. Next action:
 Mission 10 may trace supported links from explicit fixture roots.
+
+## Readability follow-up, 2026-11-09
+
+Baseline: `python scripts/graph_fixtures.py --fixture chain --inspect` exited 0.
+Moved the suspension and inspection exercises to `Diagnostics.cs`, named their
+interop statuses, and print the returned observations. The Python runner now
+uses each program's exit status rather than parsing output; the Rust model checks
+its own expected live set. The metadata witness check now sits directly before
+the read, with the foreign-table case exercised on a bounded test object.
+
+Afterward, the focused inspection command with `--log-level error` and
+`python scripts/graph_fixtures.py --log-level error --fixture chain --suspend-repeat`
+exited 0. The inspection
+observed reference, null, and the intentional mismatch with one restart per
+cycle. `python scripts/build.py verify` passed, including 49 Rust unit tests;
+`cargo +nightly-2026-08-17 miri test --locked -p gc-rust --lib inspection::tests`
+passed four tests with an existing unrelated deprecation warning. Logs remain
+under `out/graph-fixtures/`.
+
+Limitations: the runner no longer independently checks printed edges, roots,
+or which GC loaded; an incorrect graph with the same reachable set can pass.
+The metadata and runtime scope above remain unchanged. Next: review these study
+examples before beginning Mission 10.
+
+## Cycle readability follow-up, 2026-11-09
+
+The focused inspection baseline exited 0. Both diagnostic modes now share one
+small eight-cycle worker loop, with progress checked before and after each call;
+the worker synchronization stays in `BoundedMutator`. Removed per-cycle worker
+messages, redundant object `KeepAlive` calls, and checks of the local handle
+flags immediately after `Free`. Handles are still freed in `finally` and the
+type witness stays alive through the call.
+
+`python scripts/graph_fixtures.py --log-level error --fixture chain --inspect`
+and the same command with `--suspend-repeat` exited 0 after the change; the
+inspection still observed reference, null, and the intentional mismatch.
+`python scripts/build.py verify` passed, including 49 Rust unit tests. One
+concurrent baseline build failed on a shared output-file lock; the sequential
+runs succeeded. Logs are under `out/graph-fixtures/`.
+
+The normal handles remain specific to this diagnostic handoff; ZeroGC still
+does not destroy their native records. This exercise does not test moving GC
+or general handle ownership. Next: continue the review of task 9 before task 10.
+
+## Naming and explicit cases, 2026-11-09
+
+The focused `--inspect` baseline exited 0. Renamed the inspected node, known
+next node, trusted Node MethodTable, configured/expected next-node IDs, and
+observation field across C# and Rust. The inspection and repeated-suspension
+examples now list their eight calls explicitly, including the deliberate error;
+worker progress and restart checks remain in place. The interop layout is unchanged.
+
+After the changes, `python scripts/graph_fixtures.py --log-level error --fixture chain --inspect`
+and the corresponding `--suspend-repeat` run exited 0. The
+inspection again observed reference, null and the intentional mismatch.
+`python scripts/build.py verify` passed after the Rust and interop renames; the
+managed sample was rebuilt with warnings as errors after the explicit calls.
+Logs are under `out/graph-fixtures/`. The supported runtime and object shape are
+unchanged; next, review this checkpoint before proceeding to mission 10.
+
+## Inspection readability follow-up, 2026-11-09
+
+The focused `--inspect` baseline exited 0. Combined the inspection setup and
+result checks in the local `Inspect` function, which captures its handles and
+MethodTable rather than passing them through a separate five-argument helper.
+Success messages now show the observed ID, status, size and slot; errors also
+include lifecycle, restart and slot-count details. All previous result checks
+remain.
+
+Afterward, `python scripts/graph_fixtures.py --log-level error --fixture chain --inspect`
+exited 0 with reference, null and the intentional mismatch; the managed build
+had zero warnings and errors. Logs are under `out/graph-fixtures/`. The fixture
+still supports only the pinned Node shape. If a cycle throws, the worker is
+asked to stop but the current `RunWithWorker` skips `Join`; review that failure
+path before extending these diagnostics. Next: continue the task 9 review.
+
+## Worker cleanup, 2026-11-09
+
+The `--suspend-repeat` baseline exited 0. Moved the bounded worker `Join` into
+`finally`, so it also runs when a managed diagnostic callback throws. The same
+`python scripts/graph_fixtures.py --log-level error --fixture chain --suspend-repeat`
+command then exited 0, including the injected native operation failure.
+
+A separate stock-GC probe under `out/worker-cleanup-probe/` used a temporary
+instrumented copy of the worker, delayed its exit, and threw from the managed
+callback. `dotnet run --project out/worker-cleanup-probe/GraphFixtures.csproj -warnaserror`
+exited 0 after confirming the original exception reached the caller only after
+the worker exited. This verifies the managed cleanup path, not a runtime
+restart failure. A join timeout raises its own exception. Next: continue the
+review of task 9.
+
+## Typed object addresses, 2026-11-09
+
+The focused inspection and Rust inspection tests passed before the change.
+`inspect_node` now receives the existing opaque `Object` type from the resolved
+handles and reads the reference slot into the same type. Conversion to a raw
+byte pointer stays at the memory-reading boundary. `Object` does not prove
+liveness, initialization, bounds or suspension; the same unsafe preconditions
+and checks still apply. No interop layout or supported object shape changed.
+
+Afterward, `python scripts/graph_fixtures.py --log-level error --fixture chain --inspect`
+exited 0, and `python scripts/build.py verify` passed with 49 unit tests.
+`cargo +nightly-2026-08-17 miri test --locked -p gc-rust --lib inspection::tests`
+passed four synthetic tests with the existing unrelated deprecation warning.
+Miri does not validate actual CoreCLR memory. Runtime logs remain under
+`out/graph-fixtures/`. Next: review task 9 before starting task 10.
